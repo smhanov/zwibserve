@@ -28,6 +28,7 @@ func main() {
 
 run `go build` and the server will be compiled as `main`.
 
+[Test your server online](https://zwibbler.com/collaboration/testing.html).
 
 The protocol is described in [Zwibbler Collaboration Server Protocol V2](https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing)
 
