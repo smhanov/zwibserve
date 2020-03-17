@@ -29,10 +29,9 @@ func main() {
 run `go build` and the server will be compiled as `main`.
 
 
-The protocol is described in this Google Doc: https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing
+The protocol is described in [Zwibbler Collaboration Server Protocol V2](https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing)
 
-Architecturally, It uses gorilla websockets and follows closely the hub and client example
-given at https://github.com/gorilla/websocket/tree/master/examples/chat
+Architecturally, It uses gorilla websockets and follows closely the [hub and client example](https://github.com/gorilla/websocket/tree/master/examples/chat)
 
 A hub goroutine is responsible for keeping a collection of document IDs. Each
 document ID has a list of clients connected to it.
