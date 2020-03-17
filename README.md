@@ -1,7 +1,32 @@
-# zwibserve
+# zwibserve [![GoDoc](https://godoc.org/github.com/smhanov/zwibserve?status.svg)](https://godoc.org/github.com/smhanov/zwibserve)
+
 Package zwibserve is an example collaboration server for zwibbler.com
 
+This is a go package. To run it, you will create a main program like this:
 
+Run `go get github.com/smhanov/zwibserve`
+
+Create a main.go file:
+
+```go
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/smhanov/zwibserve"
+)
+
+func main() {
+	http.Handle("/socket", zwibserve.NewHandler(zwibserve.NewSQLITEDB("zwibbler.db")))
+	log.Printf("Running...")
+	http.ListenAndServe(":8004", http.DefaultServeMux)
+}
+
+```
+
+run `go build` and the server will be compiled as `main`.
 
 
 The protocol is described in this Google Doc: https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing
