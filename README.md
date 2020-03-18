@@ -21,12 +21,12 @@ import (
 func main() {
 	http.Handle("/socket", zwibserve.NewHandler(zwibserve.NewSQLITEDB("zwibbler.db")))
 	log.Printf("Running...")
-	http.ListenAndServe(":8004", http.DefaultServeMux)
+	http.ListenAndServe(":3000", http.DefaultServeMux)
 }
 
 ```
 
-run `go build` and the server will be compiled as `main`.
+run `go build` and the server will be compiled as `main`. It will run on port 3000 by default but you can change this in the main() function above.
 
 [Test your server online](https://zwibbler.com/collaboration/testing.html).
 
