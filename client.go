@@ -127,9 +127,7 @@ func (c *client) sendError(code uint16, text string) {
 }
 
 func (c *client) sendAppend(data []byte, offset uint64) {
-	log.Printf("sendAppend called for %d", c.id)
 	c.writeChan <- func() {
-		log.Printf("sendAppend running for %d", c.id)
 		var m []byte
 		m = append(m, 0x02, 0x00) // message type, more
 		m = writeUint64(m, offset)
@@ -179,10 +177,10 @@ func (c *client) sendAckNack(ack bool, length uint64) {
 		var m []byte
 		m = append(m, 0x81, 0x00)
 		if ack {
-			log.Printf("Client %v ACK message", c.id)
+			log.Printf("Client %v << ACK", c.id)
 			m = append(m, 0x00, 0x01)
 		} else {
-			log.Printf("Client %v NACK message", c.id)
+			log.Printf("Client %v << NACK", c.id)
 			m = append(m, 0x00, 0x00)
 		}
 		m = writeUint64(m, length)
@@ -297,7 +295,6 @@ func (c *client) processAppend(m []uint8) bool {
 	}
 
 	messageType := m[0]
-	log.Printf("Read uint64 from %v", m[2:10])
 	offset := readUint64(m[2:10])
 	data := m[10:]
 

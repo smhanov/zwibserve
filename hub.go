@@ -33,12 +33,10 @@ func (h *hub) removeClient(docID string, c *client) {
 	h.ch <- func() {
 		log.Printf("Client %v is removed from document %v", c.id, docID)
 		list := h.clients[docID]
-		log.Printf("    before removal: %v", list)
 		for i, value := range list {
 			if value == c {
 				list[i] = list[len(list)-1]
 				list = list[:len(list)-1]
-				log.Printf("    after removal: %v", list)
 				if len(list) > 0 {
 					h.clients[docID] = list
 				} else {
@@ -52,10 +50,9 @@ func (h *hub) removeClient(docID string, c *client) {
 
 func (h *hub) broadcast(docID string, source *client, offset uint64, data []uint8) {
 	h.ch <- func() {
-		log.Printf("client %v broadcasts %v bytes @%v: %s", source.id,
+		log.Printf("client %v broadcasts %v bytes offset %v: %s", source.id,
 			len(data), offset, string(data))
 
-		log.Printf("client list: %v", h.clients[docID])
 		for _, other := range h.clients[docID] {
 			if other != source {
 				log.Printf("... send to client %d", other.id)

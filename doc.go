@@ -1,7 +1,4 @@
-package zwibserve
-
 /*
-
 Package zwibserve is an example collaboration server for zwibbler.com
 
 The protocol is described in this Google Doc: https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing
@@ -16,6 +13,7 @@ Clients each run one goroutine for receiving messages, and one goroutine for sen
 
 The DocumentDB, which you can implement, actually stores the contents of the documents.
 Before appending to a document, it must atomically check if the length the client has given matches
-the actual length of the document.
+the actual length of the document. Default implementations MemoryDocumentDB and SQLITEDocumentDB are provided.
 
 */
+package zwibserve
