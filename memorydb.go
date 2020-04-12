@@ -10,6 +10,7 @@ import (
 type MemoryDocumentDB struct {
 	mutex     sync.Mutex
 	docs      map[string]*document
+	keys      map[string][]Key
 	lastClean time.Time
 }
 
@@ -22,6 +23,7 @@ type document struct {
 func NewMemoryDB() DocumentDB {
 	return &MemoryDocumentDB{
 		docs: make(map[string]*document),
+		keys: make(map[string][]Key),
 	}
 }
 
@@ -38,6 +40,7 @@ func (db *MemoryDocumentDB) clean() {
 		if time.Since(doc.lastAccess).Hours() > 24 {
 			log.Printf("Remove expired document %s", docid)
 			delete(db.docs, docid)
+			delete(db.keys, docid)
 			continue
 		}
 
@@ -98,4 +101,32 @@ func (db *MemoryDocumentDB) AppendDocument(docID string, oldLength uint64, newDa
 	doc.data = append(doc.data, newData...)
 
 	return uint64(len(doc.data)), nil
+}
+
+// SetDocumentKey ...
+func (db *MemoryDocumentDB) SetDocumentKey(docID string, oldVersion int, key Key) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	var existing *Key
+	for i, k := range db.keys[docID] {
+		if k.Name == key.Name {
+			existing = &db.keys[docID][i]
+			break
+		}
+	}
+
+	if existing == nil || existing.Version == oldVersion {
+		db.keys[docID] = append(db.keys[docID], key)
+		return nil
+	}
+
+	return ErrConflict
+}
+
+// GetDocumentKeys ...
+func (db *MemoryDocumentDB) GetDocumentKeys(docID string) ([]Key, error) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+	return db.keys[docID], nil
 }

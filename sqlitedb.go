@@ -15,6 +15,15 @@ CREATE TABLE IF NOT EXISTS ZwibblerDocs (
 	lastAccess INTEGER,
 	data BLOB
 );
+
+CREATE TABLE IF NOT EXISTS ZwibblerKeys (
+	docID TEXT,
+	name TEXT,
+	value TEXT,
+	version NUMBER,
+	UNIQUE(docID, name),
+	FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docID) ON DELETE CASCADE
+);
 `
 
 // SQLITEDocumentDB is a document database using SQLITE. The documents are all stored in a single file database.
@@ -128,4 +137,69 @@ func (db *SQLITEDocumentDB) AppendDocument(docID string, oldLength uint64, newDa
 	tx.MustExec("UPDATE ZwibblerDocs set lastAccess=? WHERE docid=?", time.Now().Unix(), docID)
 
 	return uint64(len(doc)), nil
+}
+
+// GetDocumentKeys ...
+func (db *SQLITEDocumentDB) GetDocumentKeys(docID string) ([]Key, error) {
+	var keys []Key
+
+	tx := db.conn.MustBegin()
+	defer tx.Commit()
+
+	rows, err := tx.Query("SELECT name, value, version FROM ZwibblerKeys WHERE docid=?", docID)
+	if err != nil {
+		log.Panic(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key Key
+		err = rows.Scan(&key.Name, &key.Value, &key.Version)
+		if err != nil {
+			log.Panic(err)
+		}
+		keys = append(keys, key)
+	}
+
+	return keys, nil
+}
+
+// SetDocumentKey ...
+func (db *SQLITEDocumentDB) SetDocumentKey(docID string, oldVersion int, key Key) error {
+	tx := db.conn.MustBegin()
+	defer tx.Commit()
+
+	var dbVersion int
+	exists := false
+
+	rows, err := tx.Query("SELECT version FROM ZwibblerKeys WHERE docid=? AND name=?", docID, key.Name)
+	if err != nil {
+		log.Panic(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		exists = true
+		err = rows.Scan(&dbVersion)
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+	rows.Close()
+
+	// if the key exists, and the old version does not match, then fail.
+	if exists && dbVersion != oldVersion {
+		return ErrConflict
+	} else if !exists && oldVersion != 0 {
+		return ErrConflict
+	}
+
+	// if the key exists, perform update. otherwise, perform insert.
+	if exists {
+		tx.MustExec(`UPDATE ZwibblerKeys SET value=?, version=? WHERE docID=? AND name=?`, key.Value, key.Version, docID, key.Name)
+	} else {
+		tx.MustExec(`INSERT INTO ZwibblerKeys(docID, name, value, version) VALUES (?, ?, ?, ?)`,
+			docID, key.Name, key.Value, key.Version)
+	}
+
+	return nil
 }

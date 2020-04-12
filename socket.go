@@ -48,6 +48,21 @@ type DocumentDB interface {
 	// If the document is not present, it returns ErrMissing.
 	// If the oldLength does not match the one recorded, then it returns ErrConflict and the current document length.
 	AppendDocument(docID string, oldLength uint64, newData []byte) (uint64, error)
+
+	// SetKey sets a key associated with a document
+	// If the oldVersion matches the current version of the document, or the key is 0 and the document
+	// does not exist, then set the key. In all other cases, return ErrConflict
+	SetDocumentKey(docID string, oldVersion int, key Key) error
+
+	// GetKey returns all keys associated with the document.
+	GetDocumentKeys(docID string) ([]Key, error)
+}
+
+// Key is a key that can be set by clients, related to the session.
+type Key struct {
+	Version int
+	Name    string
+	Value   string
 }
 
 // Handler is an HTTP handler that will

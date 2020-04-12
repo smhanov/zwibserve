@@ -2,6 +2,7 @@ package zwibserve
 
 import (
 	"log"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,9 +20,16 @@ type client struct {
 	ws    *websocket.Conn
 	docID string
 
-	db        DocumentDB
-	hub       *hub
-	writeChan chan func()
+	db     DocumentDB
+	hub    *hub
+	wakeup chan bool
+	mutex  sync.Mutex
+
+	// queued messages to send, other than key-information
+	queued [][]byte
+
+	// queued keys to update to client
+	keys []Key
 
 	// maximum message size requested by client.
 	maxSize int
@@ -30,22 +38,17 @@ type client struct {
 // Takes over the connection and runs the client, Responsible for closing the socket.
 func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 	c := &client{
-		writeChan: make(chan func(), 8),
-		ws:        ws,
-		db:        db,
-		hub:       hub,
-		id:        atomic.AddInt64(&nextClientNumber, 1),
-		maxSize:   maxMessageSize,
+		wakeup:  make(chan bool),
+		ws:      ws,
+		db:      db,
+		hub:     hub,
+		id:      atomic.AddInt64(&nextClientNumber, 1),
+		maxSize: maxMessageSize,
 	}
 
-	go func() {
-		for fn := range c.writeChan {
-			fn()
-		}
-		ws.Close()
-		log.Printf("Client %d destroyed.", c.id)
-	}()
-	defer close(c.writeChan)
+	defer close(c.wakeup)
+
+	go c.writeThread()
 
 	log.Printf("Client %d connected", c.id)
 
@@ -65,6 +68,11 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 	hub.addClient(c.docID, c)
 	defer hub.removeClient(c.docID, c)
 
+	sessionKeys, _ := c.db.GetDocumentKeys(c.docID)
+	c.notifyKeysUpdated(c.hub.getClientKeys(c.docID))
+	c.notifyKeysUpdated(sessionKeys)
+	sessionKeys = nil
+
 	// set read deadline back to normal
 	ws.SetReadDeadline(time.Time{})
 
@@ -75,10 +83,56 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 			break
 		}
 
-		if !c.processAppend(message) {
-			break
+		if message[0] == 0x02 {
+			if !c.processAppend(message) {
+				break
+			}
+		} else if message[0] == 0x03 {
+			if !c.processSetKey(message) {
+				break
+			}
+		} else {
+			log.Printf("client %v sent unepected message type %v", c.id, message[0])
 		}
 	}
+}
+
+func (c *client) writeThread() {
+	for <-c.wakeup {
+		for {
+			c.mutex.Lock()
+			messages := c.queued
+			keys := c.keys
+			c.queued = nil
+			c.keys = nil
+			c.mutex.Unlock()
+			if len(messages) == 0 && len(keys) == 0 {
+				break
+			}
+
+			// send all the queued messages.
+			for _, message := range messages {
+				c.sendMessage(message)
+			}
+
+			if len(keys) > 0 {
+				info := keyInformationMessage{
+					MessageType: 0x82,
+				}
+				for _, k := range keys {
+					info.Keys = append(info.Keys, keyInformation{
+						Version:     uint32(k.Version),
+						NameLength:  uint32(len(k.Name)),
+						Name:        k.Name,
+						ValueLength: uint32(len(k.Value)),
+						Value:       k.Value,
+					})
+				}
+				c.sendMessage(encode(nil, info))
+			}
+		}
+	}
+	c.ws.Close()
 }
 
 // Reads a complete message, taking into account the MORE byte to
@@ -112,30 +166,8 @@ func (c *client) readMessage() ([]uint8, error) {
 	return buffer, nil
 }
 
-func (c *client) sendError(code uint16, text string) {
-	c.writeChan <- func() {
-		log.Printf("Client %v error: %s", c.id, text)
-		var m []byte
-		m = append(m, 0x80, 0x00)                     // error message type
-		m = append(m, byte(code>>8), byte(code&0xff)) // code
-		m = append(m, []byte(text)...)
-		err := c.ws.WriteMessage(websocket.BinaryMessage, m)
-		if err != nil {
-			return
-		}
-	}
-}
-
-func (c *client) sendAppend(data []byte, offset uint64) {
-	c.writeChan <- func() {
-		var m []byte
-		m = append(m, 0x02, 0x00) // message type, more
-		m = writeUint64(m, offset)
-		m = append(m, data...)
-		c.sendMessage(m)
-	}
-}
-
+// Writes a complete message, respecting maximum message size and breaking it into chunks
+// if necessary. MUST ONLY BE CALLED BY WRITETHREAD
 func (c *client) sendMessage(data []byte) {
 	send := len(data)
 	if send > c.maxSize {
@@ -172,149 +204,199 @@ func (c *client) sendMessage(data []byte) {
 	}
 }
 
-func (c *client) sendAckNack(ack bool, length uint64) {
-	c.writeChan <- func() {
-		var m []byte
-		m = append(m, 0x81, 0x00)
-		if ack {
-			log.Printf("Client %v << ACK", c.id)
-			m = append(m, 0x00, 0x01)
-		} else {
-			log.Printf("Client %v << NACK", c.id)
-			m = append(m, 0x00, 0x00)
-		}
-		m = writeUint64(m, length)
-		c.ws.WriteMessage(websocket.BinaryMessage, m)
+func (c *client) enqueue(message interface{}) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.queued = append(c.queued, encode(nil, message))
+	select {
+	case c.wakeup <- true:
+	default:
 	}
 }
 
-func readUint16(m []byte) uint16 {
-	return uint16(m[0])<<8 | uint16(m[1])
+func (c *client) enqueueError(code uint16, text string) {
+	log.Printf("Client %v error: %s", c.id, text)
+	c.enqueue(errorMessage{
+		MessageType: 0x80,
+		ErrorCode:   code,
+		Description: text,
+	})
 }
 
-func readUint32(m []byte) uint32 {
-	return uint32(m[0])<<24 | uint32(m[1])<<16 | uint32(m[2])<<8 | uint32(m[3])
+func (c *client) enqueueAppend(data []byte, offset uint64) {
+	c.enqueue(appendMessage{
+		MessageType: 0x02,
+		Offset:      offset,
+		Data:        data,
+	})
 }
 
-func readUint64(m []byte) uint64 {
-	return uint64(m[0])<<56 |
-		uint64(m[1])<<48 |
-		uint64(m[2])<<40 |
-		uint64(m[3])<<32 |
-		uint64(m[4])<<24 |
-		uint64(m[5])<<16 |
-		uint64(m[6])<<8 |
-		uint64(m[7])
+func (c *client) enqueueAckNack(ack bool, length uint64) {
+	var Ack uint16
+	if ack {
+		log.Printf("Client %v << ACK", c.id)
+		Ack = 0x01
+	} else {
+		log.Printf("Client %v << NACK", c.id)
+		Ack = 0x00
+	}
+
+	c.enqueue(ackNackMessage{
+		MessageType: 0x81,
+		Ack:         Ack,
+		Offset:      length,
+	})
 }
 
-func writeUint64(m []byte, n uint64) []byte {
-	return append(m,
-		byte(n>>56),
-		byte(n>>48),
-		byte(n>>40),
-		byte(n>>32),
-		byte(n>>24),
-		byte(n>>16),
-		byte(n>>8),
-		byte(n),
-	)
+func (c *client) enqueueSetKeyAckNack(ack bool, requestID uint16) {
+	var Ack uint16
+	if ack {
+		log.Printf("Client %v << KEY ACK", c.id)
+		Ack = 0x01
+	} else {
+		log.Printf("Client %v << KEY NACK", c.id)
+		Ack = 0x00
+	}
+
+	c.enqueue(setKeyAckNackMessage{
+		MessageType: 0x83,
+		Ack:         Ack,
+		RequestID:   requestID,
+	})
+
 }
 
-func (c *client) processInitMessage(m []uint8) bool {
-	if len(m) < 15 {
-		log.Printf("Client %v: init message too short", c.id)
+func (c *client) processInitMessage(data []uint8) bool {
+	var m initMessage
+	err := decode(&m, data)
+	if err != nil {
+		log.Printf("Client %v: %v", c.id, err)
 		return false
 	}
 
-	messageType := m[0]
-	protocolVersion := int(readUint16(m[2:4]))
-	maxSize := int(readUint32(m[4:8]))
-	createMode := CreateMode(m[8])
-	offset := int(readUint64(m[9:17]))
-	idLength := int(m[17])
-
-	if messageType != 1 {
-		// error: expected init m. Send error and disconnect.
-		log.Printf("Client %v: expected init message", c.id)
+	if m.MessageType != 0x01 {
+		log.Printf("Client %v: ERROR Expected INIT message", c.id)
 		return false
 	}
 
-	if protocolVersion != 2 {
+	if m.ProtocolVersion != 2 {
 		log.Printf("Client %v: protocol versiom must be 2", c.id)
 		return false
 	}
 
-	if idLength > len(m)-18 {
-		log.Printf("Client %v: id length overflows message", c.id)
-		return false
+	if m.MaxMessageSize != 0 {
+		c.maxSize = int(m.MaxMessageSize)
 	}
 
-	if maxSize != 0 {
-		c.maxSize = maxSize
-	}
-
-	c.docID = string(m[18 : 18+idLength])
-	initialData := m[18+idLength:]
+	c.docID = m.DocID
+	initialData := m.Data
 
 	// look up document id
 	// if the document exists and create mode is ALWAYS_CREATE, then send error code ALREADY_EXISTS
 	// if the document does not exist and create mode is NEVER_CREATE then send error code DOES NOT EXIST
 	log.Printf("client %v looks for document %s", c.id, c.docID)
-	doc, created, err := c.db.GetDocument(c.docID, createMode, initialData)
+	doc, created, err := c.db.GetDocument(c.docID, CreateMode(m.CreationMode), initialData)
 	if err != nil {
 		switch err {
 		case ErrExists:
-			c.sendError(0x0002, "already exists")
+			c.enqueueError(0x0002, "already exists")
 		case ErrMissing:
-			c.sendError(0x0001, "does not exist")
+			c.enqueueError(0x0001, "does not exist")
 		default:
-			c.sendError(0, err.Error())
+			c.enqueueError(0, err.Error())
 		}
 		return false
 	}
 
+	offset := int(m.Offset)
 	if created {
 		offset = len(doc)
 	}
 
 	// if the document exists and its size is < bytesSynced, then send error code INVALID_OFFSET
 	if len(doc) < offset {
-		c.sendError(0x0003, "invalid offset")
+		c.enqueueError(0x0003, "invalid offset")
 		return false
 	}
 
 	// note that at least broadcast m is always sent, even if empty.
-	c.sendAppend(doc[offset:], uint64(offset))
+	c.enqueueAppend(doc[offset:], uint64(offset))
 	return true
 }
 
-func (c *client) processAppend(m []uint8) bool {
-	if len(m) < 13 {
-		c.sendError(0, "invalid message length")
-		return false
-	}
-
-	messageType := m[0]
-	offset := readUint64(m[2:10])
-	data := m[10:]
-
-	if messageType != 0x02 {
-		c.sendError(0, "expected append message")
+func (c *client) processAppend(data []uint8) bool {
+	var m appendMessage
+	err := decode(&m, data)
+	if err != nil {
+		log.Printf("Client %v: %v", c.id, err)
 		return false
 	}
 
 	// attempt to append to document
-	newLength, err := c.db.AppendDocument(c.docID, offset, data)
+	newLength, err := c.db.AppendDocument(c.docID, m.Offset, m.Data)
 
 	if err == nil {
-		c.sendAckNack(true, newLength)
-		c.hub.broadcast(c.docID, c, offset, data)
+		c.enqueueAckNack(true, newLength)
+		c.hub.broadcast(c.docID, c, m.Offset, m.Data)
 	} else if err == ErrConflict {
-		log.Printf("Nack. offset should be %d not %d", newLength, offset)
-		c.sendAckNack(false, newLength)
+		log.Printf("Nack. offset should be %d not %d", newLength, m.Offset)
+		c.enqueueAckNack(false, newLength)
 	} else if err == ErrMissing {
-		c.sendError(0x0001, "does not exist")
+		c.enqueueError(0x0001, "does not exist")
 	}
 
 	return true
+}
+
+func (c *client) processSetKey(data []uint8) bool {
+	var m setKeyMessage
+	err := decode(&m, data)
+	if err != nil {
+		log.Printf("Client %v: %v", c.id, err)
+		return false
+	}
+
+	var ack bool
+	if m.Lifetime == 0x00 {
+		ack = c.hub.setClientKey(c.docID, c, int(m.OldVersion), int(m.NewVersion), m.Name, m.Value)
+	} else {
+		ack = nil == c.db.SetDocumentKey(c.docID, int(m.OldVersion), Key{int(m.NewVersion), m.Name, m.Value})
+	}
+
+	if !ack || m.OldVersion != m.NewVersion {
+		c.enqueueSetKeyAckNack(ack, m.RequestID)
+	}
+
+	return true
+}
+
+func (c *client) notifyKeysUpdated(keys []Key) {
+	// a key has been updated. By the time we get around to sending it, it may have been updated
+	// again, so just store the fact that it needs to be sent for the writeThread
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	added := false
+
+outer:
+	for _, key := range keys {
+		for i, k := range c.keys {
+			if k.Name == key.Name {
+				if key.Version >= k.Version {
+					c.keys[i] = key
+				}
+				continue outer
+			}
+		}
+		// key not found, add and wakeup the writeThread
+		c.keys = append(c.keys, key)
+		added = true
+	}
+
+	if added {
+		select {
+		case c.wakeup <- true:
+		default:
+		}
+	}
 }
