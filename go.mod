@@ -1,4 +1,4 @@
-module github.com/smhanov/zwibserv
+module github.com/smhanov/zwibserve
 
 go 1.14
 
