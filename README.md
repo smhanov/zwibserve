@@ -44,3 +44,5 @@ Clients each run one goroutine for receiving messages, and one goroutine for sen
 The DocumentDB, which you can implement, actually stores the contents of the documents.
 Before appending to a document, it must atomically check if the length the client has given matches
 the actual length of the document.
+
+The server is meant to only store documents during the time that multiple people are working on them. You should have a more permanent solution to store them for saving / opening.
