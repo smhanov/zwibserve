@@ -89,7 +89,7 @@ import (
 	"log"
 	"net/http"
 
-	"zwibserve"
+	"zwibserve" // <-- Was github.com/smhanov/zwibserve
 )
 
 func main() {
@@ -98,3 +98,8 @@ func main() {
 	http.ListenAndServe(":3000", http.DefaultServeMux)
 }
 ```
+
+### Step 4: Build and run
+
+Run `go build` to build the project. Run `./server` to start it.
+
