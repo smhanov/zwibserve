@@ -60,7 +60,7 @@ Using the project as a module is the recommended way. You should not need to mak
 ```bash
 mkdir myproject
 cd myproject
-git clone git@github.com:smhanov/zwibserve.git
+git clone https://github.com/smhanov/zwibserve.git
 ```
 
 Now you have your project folder and zwibserve/ inside of it.
