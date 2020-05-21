@@ -72,6 +72,13 @@ type keyInformation struct {
 	Value       string
 }
 
+type broadcastMessage struct {
+	MessageType uint8
+	More        uint8
+	DataLength  uint32
+	Data        []byte
+}
+
 func sizeof(kind reflect.Kind) int {
 	var size int
 	switch kind {

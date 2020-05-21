@@ -91,6 +91,10 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 			if !c.processSetKey(message) {
 				break
 			}
+		} else if message[0] == 0x04 {
+			if !c.processBroadcast(message) {
+				break
+			}
 		} else {
 			log.Printf("client %v sent unepected message type %v", c.id, message[0])
 		}
@@ -231,6 +235,14 @@ func (c *client) enqueueAppend(data []byte, offset uint64) {
 	})
 }
 
+func (c *client) enqueueBroadcast(data []byte) {
+	c.enqueue(broadcastMessage{
+		MessageType: 0x04,
+		DataLength:  uint32(len(data)),
+		Data:        data,
+	})
+}
+
 func (c *client) enqueueAckNack(ack bool, length uint64) {
 	var Ack uint16
 	if ack {
@@ -337,7 +349,7 @@ func (c *client) processAppend(data []uint8) bool {
 
 	if err == nil {
 		c.enqueueAckNack(true, newLength)
-		c.hub.broadcast(c.docID, c, m.Offset, m.Data)
+		c.hub.append(c.docID, c, m.Offset, m.Data)
 	} else if err == ErrConflict {
 		log.Printf("Nack. offset should be %d not %d", newLength, m.Offset)
 		c.enqueueAckNack(false, newLength)
@@ -367,6 +379,19 @@ func (c *client) processSetKey(data []uint8) bool {
 		c.enqueueSetKeyAckNack(ack, m.RequestID)
 	}
 
+	return true
+}
+
+func (c *client) processBroadcast(data []uint8) bool {
+	var m broadcastMessage
+	err := decode(&m, data)
+	if err != nil {
+		log.Printf("Client %v: %v", c.id, err)
+		return false
+	}
+
+	// attempt to append to document
+	c.hub.broadcast(c.docID, c, m.Data)
 	return true
 }
 

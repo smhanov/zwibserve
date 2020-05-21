@@ -86,15 +86,29 @@ func (h *hub) removeClient(docID string, c *client) {
 	}
 }
 
-func (h *hub) broadcast(docID string, source *client, offset uint64, data []uint8) {
+func (h *hub) append(docID string, source *client, offset uint64, data []uint8) {
 	h.ch <- func() {
-		log.Printf("client %v broadcasts %v bytes offset %v: %s", source.id,
+		log.Printf("client %v appends %v bytes offset %v: %s", source.id,
 			len(data), offset, string(data))
 
 		for _, other := range h.sessions[docID].clients {
 			if other != source {
 				log.Printf("... send to client %d", other.id)
 				other.enqueueAppend(data, offset)
+			}
+		}
+	}
+}
+
+func (h *hub) broadcast(docID string, source *client, data []uint8) {
+	h.ch <- func() {
+		log.Printf("client %v broadcasts %v bytes: %s", source.id,
+			len(data), string(data))
+
+		for _, other := range h.sessions[docID].clients {
+			if other != source {
+				log.Printf("... send to client %d", other.id)
+				other.enqueueBroadcast(data)
 			}
 		}
 	}
