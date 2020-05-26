@@ -114,6 +114,17 @@ func (h *hub) broadcast(docID string, source *client, data []uint8) {
 	}
 }
 
+func (h *hub) setSessionKey(docID string, source *client, key Key) {
+	h.ch <- func() {
+		for _, other := range h.sessions[docID].clients {
+			if other != source {
+				log.Printf("... send to client %d", other.id)
+				other.notifyKeysUpdated([]Key{key})
+			}
+		}
+	}
+}
+
 func (h *hub) setClientKey(docID string, source *client, oldVersion, newVersion int, name, value string) bool {
 	reply := make(chan bool)
 

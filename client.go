@@ -372,7 +372,11 @@ func (c *client) processSetKey(data []uint8) bool {
 	if m.Lifetime == 0x00 {
 		ack = c.hub.setClientKey(c.docID, c, int(m.OldVersion), int(m.NewVersion), m.Name, m.Value)
 	} else {
-		ack = nil == c.db.SetDocumentKey(c.docID, int(m.OldVersion), Key{int(m.NewVersion), m.Name, m.Value})
+		key := Key{int(m.NewVersion), m.Name, m.Value}
+		ack = nil == c.db.SetDocumentKey(c.docID, int(m.OldVersion), key)
+		if ack {
+			c.hub.setSessionKey(c.docID, c, key)
+		}
 	}
 
 	if !ack || m.OldVersion != m.NewVersion {
