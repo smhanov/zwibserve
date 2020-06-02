@@ -102,38 +102,36 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 }
 
 func (c *client) writeThread() {
-	for <-c.wakeup {
-		for {
-			c.mutex.Lock()
-			messages := c.queued
-			keys := c.keys
-			c.queued = nil
-			c.keys = nil
-			c.mutex.Unlock()
-			if len(messages) == 0 && len(keys) == 0 {
-				break
-			}
+	for range c.wakeup {
+		c.mutex.Lock()
+		messages := c.queued
+		keys := c.keys
+		c.queued = nil
+		c.keys = nil
+		c.mutex.Unlock()
+		if len(messages) == 0 && len(keys) == 0 {
+			continue
+		}
 
-			// send all the queued messages.
-			for _, message := range messages {
-				c.sendMessage(message)
-			}
+		// send all the queued messages.
+		for _, message := range messages {
+			c.sendMessage(message)
+		}
 
-			if len(keys) > 0 {
-				info := keyInformationMessage{
-					MessageType: 0x82,
-				}
-				for _, k := range keys {
-					info.Keys = append(info.Keys, keyInformation{
-						Version:     uint32(k.Version),
-						NameLength:  uint32(len(k.Name)),
-						Name:        k.Name,
-						ValueLength: uint32(len(k.Value)),
-						Value:       k.Value,
-					})
-				}
-				c.sendMessage(encode(nil, info))
+		if len(keys) > 0 {
+			info := keyInformationMessage{
+				MessageType: 0x82,
 			}
+			for _, k := range keys {
+				info.Keys = append(info.Keys, keyInformation{
+					Version:     uint32(k.Version),
+					NameLength:  uint32(len(k.Name)),
+					Name:        k.Name,
+					ValueLength: uint32(len(k.Value)),
+					Value:       k.Value,
+				})
+			}
+			c.sendMessage(encode(nil, info))
 		}
 	}
 	c.ws.Close()
@@ -354,7 +352,10 @@ func (c *client) processAppend(data []uint8) bool {
 		log.Printf("Nack. offset should be %d not %d", newLength, m.Offset)
 		c.enqueueAckNack(false, newLength)
 	} else if err == ErrMissing {
+		log.Printf("ErrMissing during append: %s does not exist", c.docID)
 		c.enqueueError(0x0001, "does not exist")
+	} else {
+		log.Panic(err)
 	}
 
 	return true

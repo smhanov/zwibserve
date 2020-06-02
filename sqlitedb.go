@@ -10,6 +10,8 @@ import (
 )
 
 const schema = `
+PRAGMA foreign_keys=ON;
+
 CREATE TABLE IF NOT EXISTS ZwibblerDocs (
 	docid TEXT PRIMARY KEY, 
 	lastAccess INTEGER,
@@ -40,6 +42,8 @@ func NewSQLITEDB(filename string) DocumentDB {
 	if err != nil {
 		log.Panic(err)
 	}
+
+	sqldb.SetMaxOpenConns(1)
 
 	sqldb.MustExec(schema)
 
