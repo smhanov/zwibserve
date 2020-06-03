@@ -414,6 +414,7 @@ outer:
 			if k.Name == key.Name {
 				if key.Version >= k.Version {
 					c.keys[i] = key
+					added = true
 				}
 				continue outer
 			}
