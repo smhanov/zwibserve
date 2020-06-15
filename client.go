@@ -20,10 +20,15 @@ type client struct {
 	ws    *websocket.Conn
 	docID string
 
-	db     DocumentDB
-	hub    *hub
-	wakeup chan bool
+	db  DocumentDB
+	hub *hub
+
+	// A single thread writes to the socket. When another thread wants to
+	// send, it appends to the queue and signals the condition variable.
+	// To close the socket, we set closed = true and signal the condition.
+	wakeup *sync.Cond
 	mutex  sync.Mutex
+	closed bool
 
 	// queued messages to send, other than key-information
 	queued [][]byte
@@ -38,15 +43,20 @@ type client struct {
 // Takes over the connection and runs the client, Responsible for closing the socket.
 func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 	c := &client{
-		wakeup:  make(chan bool),
 		ws:      ws,
 		db:      db,
 		hub:     hub,
 		id:      atomic.AddInt64(&nextClientNumber, 1),
 		maxSize: maxMessageSize,
 	}
+	c.wakeup = sync.NewCond(&c.mutex)
 
-	defer close(c.wakeup)
+	defer func() {
+		c.mutex.Lock()
+		c.closed = true
+		c.wakeup.Signal()
+		c.mutex.Unlock()
+	}()
 
 	go c.writeThread()
 
@@ -102,16 +112,20 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 }
 
 func (c *client) writeThread() {
-	for range c.wakeup {
+	closed := false
+	for !closed {
 		c.mutex.Lock()
+
+		for len(c.queued) == 0 && len(c.keys) == 0 && !c.closed {
+			c.wakeup.Wait()
+		}
+
 		messages := c.queued
 		keys := c.keys
+		closed = c.closed
 		c.queued = nil
 		c.keys = nil
 		c.mutex.Unlock()
-		if len(messages) == 0 && len(keys) == 0 {
-			continue
-		}
 
 		// send all the queued messages.
 		for _, message := range messages {
@@ -210,10 +224,7 @@ func (c *client) enqueue(message interface{}) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	c.queued = append(c.queued, encode(nil, message))
-	select {
-	case c.wakeup <- true:
-	default:
-	}
+	c.wakeup.Signal()
 }
 
 func (c *client) enqueueError(code uint16, text string) {
@@ -425,9 +436,6 @@ outer:
 	}
 
 	if added {
-		select {
-		case c.wakeup <- true:
-		default:
-		}
+		c.wakeup.Signal()
 	}
 }
