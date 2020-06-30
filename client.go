@@ -112,6 +112,14 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 }
 
 func (c *client) writeThread() {
+	defer func() {
+		err := recover()
+		if err != nil {
+			log.Printf("Handling panic: %v", err)
+			c.ws.Close()
+		}
+	}()
+
 	closed := false
 	for !closed {
 		c.mutex.Lock()
