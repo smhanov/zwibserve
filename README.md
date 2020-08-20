@@ -13,7 +13,7 @@ The protocol is described in [Zwibbler Collaboration Server Protocol V2](https:/
 Use the .deb or .rpm packages from https://github.com/smhanov/zwibbler-service/releases . This will install a system service that automatically restarts if interrupted.
 After installation, it will be running on port 3000 as non-https. You can check this by going to http://yourserver.com:3000 in a web browser. You should receive a 404 error if it is working.
 
-The next step is to enable HTTPS using your certificate and private key file.
+The next step is to enable HTTPS using your certificate and private key file. You need HTTPS because if your web site is served using HTTPS, it will not be able to contact the collaboration server unless it is also HTTPS.
 
 Edit /etc/zwibbler.conf and change it:
 
@@ -34,8 +34,26 @@ You can view the logs using
 
 You should now be able to test using https://zwibbler.com/collaboration and entering wss://yourserver/socket in the URL with no port.
 
+### Using an nginx proxy
+The method above will dedicate your server to running only Zwibbler, since it takes over the HTTPS port 443. If you want to run other things on the same machine, you will likely be using the nginx web server. You can run zwibbler on a different port (eg, 3000) and configure nginx to forward requests from a certain URL to zwibbler.
 
-## Manual method
+In this case, you can leave zwibbler.conf at the default, with blank CertFile and KeyFile.  They will not be necessary since nginx will handle the security.
+
+    ServerBindAddress=0.0.0.0
+    ServerPort=3000
+    CertFile=
+    KeyFile=
+
+In your nginx configuration, include this in your server {} block. This will redirect anything on https://yourserver/socket to the zwibbler service running on port 3000.
+
+    location /socket {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+    }
+
+## Using it from a go project
 This is a go package. To run it, you will create a main program like this:
 
 ### Step 1: Get the package
