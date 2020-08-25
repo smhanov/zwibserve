@@ -8,6 +8,10 @@ The protocol is described in [Zwibbler Collaboration Server Protocol V2](https:/
 
 [Test your server online](https://zwibbler.com/collaboration/testing.html).
 
+## What do I need?
+* Linux server. [.rpm and .deb](https://github.com/smhanov/zwibbler-service/releases) installers are provided. Please contact me if you want to run on Windows.
+* Security certificates are highly recommended. Your server needs to be running on HTTPS if your web page containing the drawing tool is also served over HTTPS, otherwise the browser will not allow it to connect. 
+
 ## Quick install
 
 Use the .deb or .rpm packages from https://github.com/smhanov/zwibbler-service/releases . This will install a system service that automatically restarts if interrupted.
