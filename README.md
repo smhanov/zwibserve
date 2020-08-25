@@ -19,7 +19,7 @@ After installation, it will be running on port 3000 as non-https. You can check 
 
 The next step is to enable HTTPS using your certificate and private key file. You need HTTPS because if your web site is served using HTTPS, it will not be able to contact the collaboration server unless it is also HTTPS.
 
-Edit /etc/zwibbler.conf and change it:
+Edit /etc/zwibbler.conf and change the port to the HTTPS port 443:
 
     ServerBindAddress=0.0.0.0
     ServerPort=443
