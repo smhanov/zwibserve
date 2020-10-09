@@ -8,10 +8,11 @@ import (
 
 // MemoryDocumentDB ...
 type MemoryDocumentDB struct {
-	mutex     sync.Mutex
-	docs      map[string]*document
-	keys      map[string][]Key
-	lastClean time.Time
+	mutex      sync.Mutex
+	docs       map[string]*document
+	keys       map[string][]Key
+	lastClean  time.Time
+	expiration int64
 }
 
 type document struct {
@@ -27,7 +28,19 @@ func NewMemoryDB() DocumentDB {
 	}
 }
 
+// SetExpiration ...
+func (db *MemoryDocumentDB) SetExpiration(seconds int64) {
+	db.expiration = seconds
+}
+
 func (db *MemoryDocumentDB) clean() {
+	seconds := db.expiration
+	if seconds == 0 {
+		seconds = 24 * 60 * 60
+	} else if seconds == NoExpiration {
+		return
+	}
+
 	// must be locked
 	now := time.Now()
 
@@ -37,7 +50,7 @@ func (db *MemoryDocumentDB) clean() {
 
 	total := 0
 	for docid, doc := range db.docs {
-		if time.Since(doc.lastAccess).Hours() > 24 {
+		if int64(time.Since(doc.lastAccess).Seconds()) > seconds {
 			log.Printf("Remove expired document %s", docid)
 			delete(db.docs, docid)
 			delete(db.keys, docid)

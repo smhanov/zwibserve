@@ -37,6 +37,9 @@ const (
 	AlwaysCreate = 2
 )
 
+// NoExpiration is used in SetExpiration to indicate that documents should never expire.
+const NoExpiration = -1
+
 // DocumentDB is the interface to a document storage.
 type DocumentDB interface {
 	// GetDocument creates or retrieves the document or returns an error, depending on the value of mode.
@@ -56,6 +59,10 @@ type DocumentDB interface {
 
 	// GetKey returns all keys associated with the document.
 	GetDocumentKeys(docID string) ([]Key, error)
+
+	// SetExpirationTime sets the number of seconds that a document is kept without any activity
+	// before it is deleted. The zero value is the default (24 hours)
+	SetExpiration(seconds int64)
 }
 
 // Key is a key that can be set by clients, related to the session.

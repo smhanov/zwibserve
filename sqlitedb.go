@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS ZwibblerKeys (
 
 // SQLITEDocumentDB is a document database using SQLITE. The documents are all stored in a single file database.
 type SQLITEDocumentDB struct {
-	lastClean time.Time
-	conn      *sqlx.DB
+	lastClean  time.Time
+	conn       *sqlx.DB
+	expiration int64
 }
 
 // NewSQLITEDB creates a new document storage based on SQLITE
@@ -55,14 +56,26 @@ func NewSQLITEDB(filename string) DocumentDB {
 	return db
 }
 
+// SetExpiration ...
+func (db *SQLITEDocumentDB) SetExpiration(seconds int64) {
+	db.expiration = seconds
+}
+
 func (db *SQLITEDocumentDB) clean() {
+	seconds := db.expiration
+	if seconds == 0 {
+		seconds = 24 * 60 * 60
+	} else if seconds == NoExpiration {
+		return
+	}
+
 	now := time.Now()
 	if time.Since(db.lastClean).Minutes() < 60 {
 		return
 	}
 
 	db.conn.MustExec("DELETE FROM ZwibblerDocs WHERE lastAccess < ?",
-		now.Unix()-24*60*60)
+		now.Unix()-seconds)
 
 	db.lastClean = now
 }
