@@ -9,7 +9,7 @@ The protocol is described in [Zwibbler Collaboration Server Protocol V2](https:/
 [Test your server online](https://zwibbler.com/collaboration/testing.html).
 
 ## What do I need?
-* Linux server. [.rpm and .deb](https://github.com/smhanov/zwibbler-service/releases) installers are provided. Please contact me if you want to run on Windows.
+* Linux or Windows server. [.rpm, .deb, and .exe](https://github.com/smhanov/zwibbler-service/releases) installers are provided. 
 * Security certificates are highly recommended. Your server needs to be running on HTTPS if your web page containing the drawing tool is also served over HTTPS, otherwise the browser will not allow it to connect. 
 
 ## Quick install
@@ -56,6 +56,9 @@ In your nginx configuration, include this in your server {} block. This will red
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
     }
+
+### Using Windows Server
+After installing the [setup file](https://github.com/smhanov/zwibbler-service/releases), follow the instructions to [redirect traffic from the /socket url to your server.](https://docs.google.com/document/d/13pb4Accpa1B62gLBcwsWJDSmUND14qjXVIdJwnYc4tg/edit?usp=sharing)
 
 ### Where is the data? What if it fails?
 
