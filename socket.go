@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -106,6 +107,11 @@ func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-type", "text")
 		w.Write([]byte("Zwibbler collaboration Server is running."))
 		return
+	}
+
+	// compression not supported on Windows Server 2016.
+	if runtime.GOOS == "windows" {
+		upgrader.EnableCompression = false
 	}
 
 	// Upgrade initial GET request to a websocket
