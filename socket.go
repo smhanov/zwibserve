@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 )
@@ -99,6 +100,14 @@ var upgrader = websocket.Upgrader{
 // ServeHTTP ...
 func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Got a connection\n")
+
+	upgradeHeader := r.Header.Get("Upgrade")
+	if !strings.Contains(upgradeHeader, "websocket") {
+		w.Header().Set("Content-type", "text")
+		w.Write([]byte("Zwibbler collaboration Server is running."))
+		return
+	}
+
 	// Upgrade initial GET request to a websocket
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {

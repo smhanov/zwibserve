@@ -15,7 +15,7 @@ The protocol is described in [Zwibbler Collaboration Server Protocol V2](https:/
 ## Quick install
 
 Use the .deb or .rpm packages from https://github.com/smhanov/zwibbler-service/releases . This will install a system service that automatically restarts if interrupted.
-After installation, it will be running on port 3000 as non-https. You can check this by going to http://yourserver.com:3000 in a web browser. You should receive a 404 error if it is working.
+After installation, it will be running on port 3000 as non-https. You can check this by going to http://yourserver.com:3000 in a web browser. You should receive a message that says it is working.
 
 The next step is to enable HTTPS using your certificate and private key file. You need HTTPS because if your web site is served using HTTPS, it will not be able to contact the collaboration server unless it is also HTTPS.
 
