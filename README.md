@@ -60,6 +60,8 @@ In your nginx configuration, include this in your server {} block. This will red
 ### Using Windows Server
 After installing the [setup file](https://github.com/smhanov/zwibbler-service/releases), follow the instructions to [redirect traffic from the /socket url to your server.](https://docs.google.com/document/d/13pb4Accpa1B62gLBcwsWJDSmUND14qjXVIdJwnYc4tg/edit?usp=sharing)
 
+On Windows, the zwibbler.log, zwibbler.conf, and zwibbler.db files are all located in C:\zwibbler, and they will not be removed if you uninstall the server.
+
 ### Where is the data? What if it fails?
 
 The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The collaboration server is designed to store data only while a session is active. Long term storage should use [ctx.save()](https://zwibbler.com/docs/#save) and store the data using other means. Sessions that have not been accessed in 24 hours are purged.
