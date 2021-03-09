@@ -64,11 +64,26 @@ On Windows, the zwibbler.log, zwibbler.conf, and zwibbler.db files are all locat
 
 ### Where is the data? What if it fails?
 
-The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The collaboration server is designed to store data only while a session is active. Long term storage should use [ctx.save()](https://zwibbler.com/docs/#save) and store the data using other means. Sessions that have not been accessed in 24 hours are purged.
 
 If the collaboration server restarts, clients will gracefully reconnect without the user noticing anything wrong and any active sessions are preserved.
 
 Multiple instances of the server are not supported at this time. There must be one single collaboration server. It will support thousands of users without problems.
+
+There are two options for data storage.
+#### Sqlite (default)
+The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The collaboration server is designed to store data only while a session is active. Long term storage should use [ctx.save()](https://zwibbler.com/docs/#save) and store the data using other means. Sessions that have not been accessed in 24 hours are purged.
+
+#### Redis
+
+To use redis, add these lines to the zwibbler.conf file:
+
+    # Can be sqlite or redis
+    Database=redis
+
+    # If using Redis, these are the settings.
+    # Default: localhost:6379
+    RedisServer=
+    RedisPassword=
 
 ## Using it from a go project
 This is a go package. To run it, you will create a main program like this:
