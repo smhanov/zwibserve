@@ -57,6 +57,24 @@ In your nginx configuration, include this in your server {} block. This will red
         proxy_set_header Connection "Upgrade";
     }
 
+### Using an Apache proxy
+If you are running the Apache web server and have existing services running on it, you will need to configure it to forward requests for the socket to the Zwibbler collaboration service.
+
+If you are running CentOS, you may need to install the Apache proxy module, and configure security to allow Apache to make connections. If the second line fails because you do not have SELinux installed, that is OK.
+
+    sudo yum install mod_proxy
+    sudo /usr/sbin/setsebool -P httpd_can_network_connect 1
+
+Create a file in /etc/httpd/conf.d/zwibbler.conf with the following contents. It says to forward any request to /socket to our collaboration service running on port 3000.
+
+	<VirtualHost *:443>
+	    SSLProxyEngine On
+	    <Location "/socket">
+		ProxyPass ws://localhost:3000/socket
+		ProxyPassReverse ws://localhost:3000/socket
+	    </Location>
+	</VirtualHost>
+
 ### Using Windows Server
 After installing the [setup file](https://github.com/smhanov/zwibbler-service/releases), follow the instructions to [redirect traffic from the /socket url to your server.](https://docs.google.com/document/d/13pb4Accpa1B62gLBcwsWJDSmUND14qjXVIdJwnYc4tg/edit?usp=sharing)
 
