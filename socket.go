@@ -79,14 +79,16 @@ type Key struct {
 type Handler struct {
 	db  DocumentDB
 	hub *hub
+	canCreate bool
 }
 
 // NewHandler returns a new Zwibbler Handler. You must pass it a document database to use.
 // You may use one of MemoryDocumentDB, SQLITEDocumentDB or create your own.
-func NewHandler(db DocumentDB) *Handler {
+func NewHandler(db DocumentDB, canCreate bool) *Handler {
 	return &Handler{
 		db:  db,
 		hub: newHub(),
+		canCreate: canCreate,
 	}
 }
 
@@ -121,5 +123,5 @@ func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runClient(zh.hub, zh.db, ws)
+	runClient(zh.hub, zh.db, ws, zh.canCreate)
 }

@@ -38,16 +38,19 @@ type client struct {
 
 	// maximum message size requested by client.
 	maxSize int
+
+	canCreate bool
 }
 
 // Takes over the connection and runs the client, Responsible for closing the socket.
-func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
+func runClient(hub *hub, db DocumentDB, ws *websocket.Conn, canCreate bool) {
 	c := &client{
 		ws:      ws,
 		db:      db,
 		hub:     hub,
 		id:      atomic.AddInt64(&nextClientNumber, 1),
 		maxSize: maxMessageSize,
+		canCreate: canCreate,
 	}
 	c.wakeup = sync.NewCond(&c.mutex)
 
@@ -324,7 +327,11 @@ func (c *client) processInitMessage(data []uint8) bool {
 	// if the document exists and create mode is ALWAYS_CREATE, then send error code ALREADY_EXISTS
 	// if the document does not exist and create mode is NEVER_CREATE then send error code DOES NOT EXIST
 	log.Printf("client %v looks for document %s", c.id, c.docID)
-	doc, created, err := c.db.GetDocument(c.docID, CreateMode(m.CreationMode), initialData)
+	createMode := CreateMode(NeverCreate)
+	if c.canCreate {
+		createMode = CreateMode(m.CreationMode)
+	}
+	doc, created, err := c.db.GetDocument(c.docID, createMode, initialData)
 	if err != nil {
 		switch err {
 		case ErrExists:
