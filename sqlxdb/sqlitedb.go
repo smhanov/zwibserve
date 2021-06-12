@@ -9,18 +9,29 @@ var sqliteSchema = []string{`
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS ZwibblerDocs (
-	docid TEXT PRIMARY KEY, 
-	lastAccess INTEGER,
-	data BLOB
+	id 			INTEGER PRIMARY KEY,
+	name 		TEXT UNIQUE, 
+	autoClean	INTEGER,		
+	lastAccess 	INTEGER,
+	size		INTEGER,
+	seq			INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS ZwibblerDocParts (
+	doc 	INTEGER NOT NULL,
+	seq 	INTEGER	NOT NULL,
+	data	BLOB,
+	PRIMARY KEY (doc, seq)
+	FOREIGN KEY (doc) REFERENCES ZwibblerDocs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS ZwibblerKeys (
-	docID TEXT,
-	name TEXT,
-	value TEXT,
-	version INTEGER,
-	UNIQUE(docID, name),
-	FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docID) ON DELETE CASCADE
+	doc		INTEGER NOT NULL,
+	name	TEXT NOT NULL,
+	value	TEXT,
+	version	INTEGER,
+	UNIQUE(doc, name),
+	FOREIGN KEY (doc) REFERENCES ZwibblerDocs(id) ON DELETE CASCADE
 );
 `}
 
@@ -31,5 +42,5 @@ func sqliteDataSource(filename string) string {
 }
 
 func NewSqliteDb(filename string) zwibserve.DocumentDB {
-	return NewSQLXDB(sqliteDriver, sqliteDataSource(filename), sqliteSchema)
+	return NewSQLXDB(sqliteDriver, sqliteDataSource(filename), sqliteSchema, 1)
 }

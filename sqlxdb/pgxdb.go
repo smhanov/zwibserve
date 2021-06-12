@@ -7,18 +7,29 @@ import (
 
 var pgxSchema = []string{`
 CREATE TABLE IF NOT EXISTS ZwibblerDocs (
-	docid TEXT PRIMARY KEY, 
-	lastAccess INTEGER,
-	data BYTEA
+	id 			BIGSERIAL NOT NULL PRIMARY KEY,
+	name 		VARCHAR(256) NOT NULL UNIQUE, 
+	autoClean	SMALLINT NOT NULL DEFAULT 0,		
+	lastAccess 	BIGINT NOT NULL DEFAULT 0,
+	size		BIGINT NOT NULL DEFAULT 0,
+	seq			BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS ZwibblerDocParts (
+	doc 	BIGINT NOT NULL,
+	seq 	BIGINT NOT NULL,
+	data	BYTEA NOT NULL,
+	PRIMARY KEY (doc, seq),
+	FOREIGN KEY (doc) REFERENCES ZwibblerDocs(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS ZwibblerKeys (
-	docID TEXT,
-	name TEXT,
-	value TEXT,
-	version INTEGER,
-	UNIQUE(docID, name),
-	FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docID) ON DELETE CASCADE
+	doc		BIGINT NOT NULL,
+	name	VARCHAR(256) NOT NULL,
+	value	TEXT,
+	version	INTEGER,
+	UNIQUE(doc, name),
+	FOREIGN KEY (doc) REFERENCES ZwibblerDocs(id) ON DELETE CASCADE
 );
 `}
 
@@ -29,5 +40,5 @@ func pgxDataSource(host string, port int, user string, password string, dbname s
 }
 
 func NewPgxDb(host string, port int, user string, password string, dbname string) zwibserve.DocumentDB {
-	return NewSQLXDB(pgxDriver, pgxDataSource(host, port, user, password, dbname), pgxSchema)
+	return NewSQLXDB(pgxDriver, pgxDataSource(host, port, user, password, dbname), pgxSchema, 10)
 }
