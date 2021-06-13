@@ -1,9 +1,7 @@
 package sqlxdb
 
 import (
-	"database/sql"
 	"github.com/smhanov/zwibserve"
-	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -15,8 +13,8 @@ func now() int64 {
 
 // SQLXDocumentDB is a document database using SQLX. The documents are all stored in a single file database.
 type SQLXDocumentDB struct {
+	SQLXConnection
 	lastClean  time.Time
-	conn       *sqlx.DB
 	expiration int64
 }
 
@@ -36,22 +34,12 @@ type DocPart struct {
 }
 
 // NewSQLXDB creates a new document storage based on SQLX
-func NewSQLXDB(driverName, dataSourceName string, schema []string, maxOpenConnections int) zwibserve.DocumentDB {
-
-	sqldb, err := sqlx.Connect(driverName, dataSourceName)
-
-	if err != nil {
-		log.Panic(err)
-	}
-
-	sqldb.SetMaxOpenConns(maxOpenConnections)
-
-	for i := 0; i < len(schema); i++ {
-		sqldb.MustExec(schema[i])
-	}
+func NewSQLXDB(sqldb SQLXConnection) zwibserve.DocumentDB {
 
 	db := &SQLXDocumentDB{
-		conn: sqldb,
+		sqldb,
+		time.Now(),
+		0,
 	}
 
 	db.clean()
@@ -61,43 +49,6 @@ func NewSQLXDB(driverName, dataSourceName string, schema []string, maxOpenConnec
 // SetExpiration ...
 func (db *SQLXDocumentDB) SetExpiration(seconds int64) {
 	db.expiration = seconds
-}
-
-func (db *SQLXDocumentDB) tx() *sqlx.Tx {
-	return db.conn.MustBegin()
-}
-
-func (db *SQLXDocumentDB) query(tx *sqlx.Tx, query string, args ...interface{}) *sql.Rows {
-	rows, err := tx.Query(db.conn.Rebind(query), args...)
-	if err != nil {
-		log.Panic(err)
-	}
-	return rows
-}
-
-func (db *SQLXDocumentDB) exec(tx *sqlx.Tx, query string, args ...interface{}) {
-	tx.MustExec(db.conn.Rebind(query), args...)
-}
-
-func (db *SQLXDocumentDB) commit(tx *sqlx.Tx) {
-	err := tx.Commit()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func (db *SQLXDocumentDB) close(rows *sql.Rows) {
-	err := rows.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func (db *SQLXDocumentDB) scan(rows *sql.Rows, fields ...interface{}) {
-	err := rows.Scan(fields...)
-	if err != nil {
-		log.Panic(err)
-	}
 }
 
 func (db *SQLXDocumentDB) clean() {
@@ -113,22 +64,22 @@ func (db *SQLXDocumentDB) clean() {
 		return
 	}
 
-	tx := db.tx()
-	defer db.commit(tx)
+	tx := db.Tx()
+	defer db.Commit(tx)
 
-	db.exec(tx, "DELETE FROM ZwibblerDocs WHERE lastAccess < ? AND autoClean > 0",
+	db.Exec(tx, "DELETE FROM ZwibblerDocs WHERE lastAccess < ? AND autoClean > 0",
 		now.Unix()-seconds)
 	db.lastClean = now
 }
 
 func (db *SQLXDocumentDB) getDocByName(tx *sqlx.Tx, name string) *Doc {
-	rows := db.query(tx, "SELECT id, name, autoClean, lastAccess, size, seq FROM ZwibblerDocs WHERE name = ?", name)
+	rows := db.Query(tx, "SELECT id, name, autoClean, lastAccess, size, seq FROM ZwibblerDocs WHERE name = ?", name)
 	var res *Doc = nil
 	if rows.Next() {
 		res = &Doc{}
-		db.scan(rows, &res.id, &res.name, &res.autoClean, &res.lastAccess, &res.size, &res.seq)
+		db.Scan(rows, &res.id, &res.name, &res.autoClean, &res.lastAccess, &res.size, &res.seq)
 	}
-	db.close(rows)
+	db.Close(rows)
 	return res
 }
 
@@ -137,8 +88,8 @@ func (db *SQLXDocumentDB) appendPart(tx *sqlx.Tx, doc *Doc, data []byte) int64 {
 	if l > 0 {
 		seq := doc.seq + 1
 		size := doc.size + l
-		db.exec(tx, "INSERT INTO ZwibblerDocParts (doc, seq, data) VALUES (?, ?, ?)", doc.id, seq, data)
-		db.exec(tx, "UPDATE ZwibblerDocs set lastAccess = ?, size = ?, seq = ? WHERE id = ?", now(), size, seq, doc.id)
+		db.Exec(tx, "INSERT INTO ZwibblerDocParts (doc, seq, data) VALUES (?, ?, ?)", doc.id, seq, data)
+		db.Exec(tx, "UPDATE ZwibblerDocs set lastAccess = ?, size = ?, seq = ? WHERE id = ?", now(), size, seq, doc.id)
 		return size
 	} else {
 		return doc.size
@@ -149,8 +100,8 @@ func (db *SQLXDocumentDB) appendPart(tx *sqlx.Tx, doc *Doc, data []byte) int64 {
 func (db *SQLXDocumentDB) GetDocument(docID string, mode zwibserve.CreateMode, initialData []byte) ([]byte, bool, error) {
 	db.clean()
 
-	tx := db.tx()
-	defer db.commit(tx)
+	tx := db.Tx()
+	defer db.Commit(tx)
 
 	doc := db.getDocByName(tx, docID)
 
@@ -161,24 +112,24 @@ func (db *SQLXDocumentDB) GetDocument(docID string, mode zwibserve.CreateMode, i
 	} else {
 		created := false
 		if doc == nil {
-			db.exec(tx, "INSERT INTO ZwibblerDocs (name, lastAccess, autoClean, size, seq) VALUES (?, ?, ?, ?, ?)",
+			db.Exec(tx, "INSERT INTO ZwibblerDocs (name, lastAccess, autoClean, size, seq) VALUES (?, ?, ?, ?, ?)",
 				docID, now(), 1, 0, 0)
 			doc = db.getDocByName(tx, docID)
 			db.appendPart(tx, doc, initialData)
 			created = true
 		} else {
-			db.exec(tx, "UPDATE ZwibblerDocs set lastAccess = ? WHERE id = ?", now(), doc.id)
+			db.Exec(tx, "UPDATE ZwibblerDocs set lastAccess = ? WHERE id = ?", now(), doc.id)
 		}
 
-		rows := db.query(tx, "SELECT data FROM ZwibblerDocParts WHERE doc = ? ORDER BY seq", doc.id)
+		rows := db.Query(tx, "SELECT data FROM ZwibblerDocParts WHERE doc = ? ORDER BY seq", doc.id)
 		var data []byte
 		for rows.Next() {
 			var rowData []byte
-			db.scan(rows, &rowData)
+			db.Scan(rows, &rowData)
 			data = append(data, rowData...)
 			created = false
 		}
-		db.close(rows)
+		db.Close(rows)
 
 		return data, created, nil
 	}
@@ -187,8 +138,8 @@ func (db *SQLXDocumentDB) GetDocument(docID string, mode zwibserve.CreateMode, i
 // AppendDocument ...
 func (db *SQLXDocumentDB) AppendDocument(docID string, oldLength uint64, newData []byte) (uint64, error) {
 	db.clean()
-	tx := db.tx()
-	defer db.commit(tx)
+	tx := db.Tx()
+	defer db.Commit(tx)
 
 	doc := db.getDocByName(tx, docID)
 
@@ -207,25 +158,25 @@ func (db *SQLXDocumentDB) AppendDocument(docID string, oldLength uint64, newData
 func (db *SQLXDocumentDB) GetDocumentKeys(docID string) ([]zwibserve.Key, error) {
 	var keys []zwibserve.Key
 
-	tx := db.tx()
-	defer db.commit(tx)
+	tx := db.Tx()
+	defer db.Commit(tx)
 
-	rows := db.query(tx, "SELECT k.name, k.value, version FROM ZwibblerKeys k, ZwibblerDocs d WHERE d.name = ? AND k.doc = d.id", docID)
+	rows := db.Query(tx, "SELECT k.name, k.value, version FROM ZwibblerKeys k, ZwibblerDocs d WHERE d.name = ? AND k.doc = d.id", docID)
 
 	for rows.Next() {
 		var key zwibserve.Key
-		db.scan(rows, &key.Name, &key.Value, &key.Version)
+		db.Scan(rows, &key.Name, &key.Value, &key.Version)
 		keys = append(keys, key)
 	}
-	db.close(rows)
+	db.Close(rows)
 
 	return keys, nil
 }
 
 // SetDocumentKey ...
 func (db *SQLXDocumentDB) SetDocumentKey(docID string, oldVersion int, key zwibserve.Key) error {
-	tx := db.tx()
-	defer db.commit(tx)
+	tx := db.Tx()
+	defer db.Commit(tx)
 
 	var dbVersion int
 	exists := false
@@ -236,12 +187,12 @@ func (db *SQLXDocumentDB) SetDocumentKey(docID string, oldVersion int, key zwibs
 		return zwibserve.ErrMissing
 	}
 
-	rows := db.query(tx, "SELECT version FROM ZwibblerKeys WHERE doc = ? AND name = ?", doc.id, key.Name)
+	rows := db.Query(tx, "SELECT version FROM ZwibblerKeys WHERE doc = ? AND name = ?", doc.id, key.Name)
 	if rows.Next() {
 		exists = true
-		db.scan(rows, &dbVersion)
+		db.Scan(rows, &dbVersion)
 	}
-	db.close(rows)
+	db.Close(rows)
 
 	// if the key exists, and the old version does not match, then fail.
 	if exists && dbVersion != oldVersion {
@@ -252,10 +203,10 @@ func (db *SQLXDocumentDB) SetDocumentKey(docID string, oldVersion int, key zwibs
 
 	// if the key exists, perform update. otherwise, perform insert.
 	if exists {
-		db.exec(tx, `UPDATE ZwibblerKeys SET value = ?, version = ? WHERE doc = ? AND name = ?`,
+		db.Exec(tx, `UPDATE ZwibblerKeys SET value = ?, version = ? WHERE doc = ? AND name = ?`,
 			key.Value, key.Version, doc.id, key.Name)
 	} else {
-		db.exec(tx, `INSERT INTO ZwibblerKeys(doc, name, value, version) VALUES (?, ?, ?, ?)`,
+		db.Exec(tx, `INSERT INTO ZwibblerKeys(doc, name, value, version) VALUES (?, ?, ?, ?)`,
 			doc.id, key.Name, key.Value, key.Version)
 	}
 

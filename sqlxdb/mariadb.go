@@ -2,7 +2,6 @@ package sqlxdb
 
 import (
 	"fmt"
-	"github.com/smhanov/zwibserve"
 )
 
 var mariaSchema = []string{`
@@ -40,6 +39,6 @@ func mariaDataSource(host string, port int, user string, password string, dbname
 	return fmt.Sprintf("%s:%s@(%s:%d)/%s", user, password, host, port, dbname)
 }
 
-func NewMariaDb(host string, port int, user string, password string, dbname string) zwibserve.DocumentDB {
-	return NewSQLXDB(mariaDriver, mariaDataSource(host, port, user, password, dbname), mariaSchema, 10)
+func NewMariaConnection(host string, port int, user string, password string, dbname string) SQLXConnection {
+	return NewSQLXConnection(mariaDriver, mariaDataSource(host, port, user, password, dbname), mariaSchema, 10)
 }

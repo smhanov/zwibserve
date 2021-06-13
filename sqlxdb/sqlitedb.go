@@ -2,7 +2,6 @@ package sqlxdb
 
 import (
 	"fmt"
-	"github.com/smhanov/zwibserve"
 )
 
 var sqliteSchema = []string{`
@@ -41,6 +40,6 @@ func sqliteDataSource(filename string) string {
 	return fmt.Sprintf("file:%s?_busy_timeout=5000&mode=rwc&_journal_mode=WAL&cache=shared", filename)
 }
 
-func NewSqliteDb(filename string) zwibserve.DocumentDB {
-	return NewSQLXDB(sqliteDriver, sqliteDataSource(filename), sqliteSchema, 1)
+func NewSqliteConnection(filename string) SQLXConnection {
+	return NewSQLXConnection(sqliteDriver, sqliteDataSource(filename), sqliteSchema, 1)
 }

@@ -2,7 +2,6 @@ package sqlxdb
 
 import (
 	"fmt"
-	"github.com/smhanov/zwibserve"
 )
 
 var pgxSchema = []string{`
@@ -39,6 +38,6 @@ func pgxDataSource(host string, port int, user string, password string, dbname s
 	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, password, host, port, dbname)
 }
 
-func NewPgxDb(host string, port int, user string, password string, dbname string) zwibserve.DocumentDB {
-	return NewSQLXDB(pgxDriver, pgxDataSource(host, port, user, password, dbname), pgxSchema, 10)
+func NewPgxConnection(host string, port int, user string, password string, dbname string) SQLXConnection {
+	return NewSQLXConnection(pgxDriver, pgxDataSource(host, port, user, password, dbname), pgxSchema, 10)
 }
