@@ -192,7 +192,7 @@ func (db *RedisDocumentDB) SetDocumentKey(docID string, oldVersion int, key Key)
 				return err
 			}
 
-			if key.Version != oldVersion {
+			if currentKey.Version != oldVersion {
 				return ErrConflict
 			}
 
