@@ -25,8 +25,9 @@ Edit /etc/zwibbler.conf and change the port to the HTTPS port 443:
     ServerPort=443
     CertFile=
     KeyFile=
+    Compression=
 
-Change CertFile and KeyFile to be the path to your SSL certificate information on the system. CertFile is your certificate, and KeyFile is your private key.
+Change CertFile and KeyFile to be the path to your SSL certificate information on the system. CertFile is your certificate, and KeyFile is your private key. You can leave the other settings as they are. Specifying Compression=0 will disable socket compression. Otherwise, it will be enabled by default.
 
 Next, restart the service using
 

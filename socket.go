@@ -77,25 +77,33 @@ type Key struct {
 // Handler is an HTTP handler that will
 // enable collaboration between clients.
 type Handler struct {
-	db  DocumentDB
-	hub *hub
+	db               DocumentDB
+	hub              *hub
+	allowCompression bool
 }
 
 // NewHandler returns a new Zwibbler Handler. You must pass it a document database to use.
 // You may use one of MemoryDocumentDB, SQLITEDocumentDB or create your own.
 func NewHandler(db DocumentDB) *Handler {
 	return &Handler{
-		db:  db,
-		hub: newHub(),
+		db:               db,
+		hub:              newHub(),
+		allowCompression: true,
 	}
 }
 
 // Configure the upgrader
-var upgrader = websocket.Upgrader{
+var globalUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
 	EnableCompression: true,
+}
+
+// SetCompressionAllowed allows you to always disable socket compression.
+// By default, socket compression is allowed.
+func (zh *Handler) SetCompressionAllowed(allowed bool) {
+	zh.allowCompression = allowed
 }
 
 // ServeHTTP ...
@@ -111,8 +119,10 @@ func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	upgrader := globalUpgrader // copy
+
 	// compression not supported on Windows Server 2016.
-	if runtime.GOOS == "windows" || compression == "0" {
+	if runtime.GOOS == "windows" || compression == "0" || !zh.allowCompression {
 		log.Printf("Disabling socket compression")
 		upgrader.EnableCompression = false
 	}
