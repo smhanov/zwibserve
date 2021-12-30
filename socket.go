@@ -103,6 +103,8 @@ func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Got a connection\n")
 
 	upgradeHeader := r.Header.Get("Upgrade")
+	compression := r.FormValue("compression")
+
 	if !strings.Contains(upgradeHeader, "websocket") {
 		w.Header().Set("Content-type", "text")
 		w.Write([]byte("Zwibbler collaboration Server is running."))
@@ -110,7 +112,8 @@ func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// compression not supported on Windows Server 2016.
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" || compression == "0" {
+		log.Printf("Disabling socket compression")
 		upgrader.EnableCompression = false
 	}
 
