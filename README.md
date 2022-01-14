@@ -61,15 +61,30 @@ In your nginx configuration, include this in your server {} block. This will red
 ### Using an Apache proxy
 If you are running the Apache web server and have existing services running on it, you will need to configure it to forward requests for the socket to the Zwibbler collaboration service.
 
+When using a proxy, leave the CertFile/KeyFile blank and keep the Zwibbler service on a different port than 3000. In this case, Apache will handle the security. Example /etc/zwibbler.conf file:
+
+    ServerBindAddress=0.0.0.0
+    ServerPort=3000
+    CertFile=
+    KeyFile=
+
 If you are running CentOS, you may need to install the Apache proxy module, and configure security to allow Apache to make connections. If the second line fails because you do not have SELinux installed, that is OK.
 
     sudo yum install mod_proxy
     sudo /usr/sbin/setsebool -P httpd_can_network_connect 1
 
-Create a file in /etc/httpd/conf.d/zwibbler.conf with the following contents. It says to forward any request to /socket to our collaboration service running on port 3000.
+Find the virtual host configuration for your web site. It may be in /etc/httpd/conf/httpd.conf or in a file under /etc/httpd/conf.d/. Add the SSLProxyEngine and <Location></Location> lines to your virtual host configuration for your web site. It says to forward any request to /socket to our collaboration service running on port 3000. Here is an example.
 
 	<VirtualHost *:443>
+	    SSLEngine on 
 	    SSLProxyEngine On
+	    ServerName www.example.com
+	    DocumentRoot "/var/www/html"
+	    SSLCertificateFile /path/to/.crt
+	    SSLCertificateKeyFile /path/to/.key
+	    
+	    # ADD THESE LINES
+	    SSLProxyEngine on 
 	    <Location "/socket">
 		ProxyPass ws://localhost:3000/socket
 		ProxyPassReverse ws://localhost:3000/socket
