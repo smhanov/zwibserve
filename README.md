@@ -96,6 +96,14 @@ After installing the [setup file](https://github.com/smhanov/zwibbler-service/re
 
 On Windows, the zwibbler.log, zwibbler.conf, and zwibbler.db files are all located in C:\zwibbler, and they will not be removed if you uninstall the server.
 
+## Testing if it is working
+
+Once you have the server running, test if it is working by going to https://yourserver.com/socket in your web browser. You should see a message like this:
+
+    Zwibbler collaboration Server is running.
+    
+After that, go to https://zwibbler.com/collaboration/testing.html and enter the your server wss:// url in the box (eg, wss://yourserver.com/socket) and click on "Run Tests". You should see the tests all pass and turn green.
+
 ### Where is the data? What if it fails?
 
 
