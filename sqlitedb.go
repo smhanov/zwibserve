@@ -3,6 +3,7 @@ package zwibserve
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -26,6 +27,16 @@ CREATE TABLE IF NOT EXISTS ZwibblerKeys (
 	UNIQUE(docID, name),
 	FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docID) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS ZwibblerTokens (
+	tokenID TEXT UNIQUE,
+	docID TEXT,
+	userID TEXT,
+	permissions TEXT,
+	expiration INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS ZwibblerTokenUserIndex ON ZwibblerTokens(userID);
 `
 
 // SQLITEDocumentDB is a document database using SQLITE. The documents are all stored in a single file database.
@@ -76,7 +87,8 @@ func (db *SQLITEDocumentDB) clean() {
 
 	db.conn.MustExec("DELETE FROM ZwibblerDocs WHERE lastAccess < ?",
 		now.Unix()-seconds)
-
+	db.conn.MustExec("DELETE FROM ZwibblerTokens WHERE expiration < ?",
+		now.Unix())
 	db.lastClean = now
 }
 
@@ -218,5 +230,70 @@ func (db *SQLITEDocumentDB) SetDocumentKey(docID string, oldVersion int, key Key
 			docID, key.Name, key.Value, key.Version)
 	}
 
+	return nil
+}
+
+func (db *SQLITEDocumentDB) DeleteDocument(docID string) error {
+	db.conn.MustExec("DELETE FROM ZwibblerDocs WHERE docID=?", docID)
+	return nil
+}
+
+// AddToken ...
+func (db *SQLITEDocumentDB) AddToken(tokenID, docID, userID, permissions string, expirationSeconds int64, contents []byte) error {
+	tx := db.conn.MustBegin()
+	defer tx.Commit()
+
+	// check if doc exists
+	if len(contents) > 0 {
+		rows, err := tx.Query("SELECT data FROM ZwibblerDocs WHERE docid=?", docID)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer rows.Close()
+		if rows.Next() {
+			return ErrConflict
+		}
+
+		tx.MustExec(`INSERT INTO ZwibblerDocs (docid, lastAccess, data) VALUES (?, ?, ?)`,
+			docID, time.Now().Unix(), contents)
+	}
+
+	_, err := tx.Exec("INSERT INTO ZwibblerTokens(tokenID, docID, userID, permissions, expiration) VALUES (?, ?, ?, ?, ?)",
+		tokenID, docID, userID, permissions, expirationSeconds)
+
+	if err != nil {
+		tx.Rollback()
+		if strings.Contains(err.Error(), "UNIQUE") {
+			err = ErrExists
+		}
+
+	}
+
+	return err
+}
+
+func (db *SQLITEDocumentDB) GetToken(token string) (docID, userID, permissions string, err error) {
+	tx := db.conn.MustBegin()
+	defer tx.Commit()
+	now := time.Now().Unix()
+	rows, err := tx.Query("SELECT docID, userID, permissions FROM ZwibblerTokens WHERE tokenID=? AND expiration > ?", token, now)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	if rows.Next() {
+		err = rows.Scan(&docID, &userID, &permissions)
+	} else {
+		err = ErrMissing
+	}
+
+	return
+}
+
+func (db *SQLITEDocumentDB) UpdateUser(userID, permissions string) error {
+	tx := db.conn.MustBegin()
+	defer tx.Commit()
+	tx.MustExec("UPDATE ZwibblerTokens SET permissions=? WHERE userID=?", userID, permissions)
 	return nil
 }

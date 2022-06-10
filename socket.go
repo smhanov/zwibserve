@@ -19,9 +19,13 @@ var ErrMissing error
 // ErrExists indicates that the document already exists
 var ErrExists error
 
+// ErrTokenExists indicates that the token being added already exists.
+var ErrTokenExists error
+
 func init() {
 	ErrConflict = errors.New("Conflict")
 	ErrMissing = errors.New("Missing")
+	//lint:ignore ST1005 error text is specified in the protocol
 	ErrExists = errors.New("Already exists")
 }
 
@@ -65,6 +69,20 @@ type DocumentDB interface {
 	// SetExpirationTime sets the number of seconds that a document is kept without any activity
 	// before it is deleted. The zero value is the default (24 hours)
 	SetExpiration(seconds int64)
+
+	DeleteDocument(docID string) error
+
+	// AddToken shall associate token/document/user/permissions together
+	// if token already exists, return ErrExists
+	// if contents specified and document already exists, return ErrConflict
+	AddToken(token, docID, userID, permissions string, expirationSeconds int64, contents []byte) error
+
+	// Given a token, returns docID, userID, permissions. If it does not exist or is expired,
+	// the error is ErrMissing
+	GetToken(token string) (string, string, string, error)
+
+	// If the user has any tokens, the permissions of all of them are updated.
+	UpdateUser(userID, permissions string) error
 }
 
 // Key is a key that can be set by clients, related to the session.
@@ -80,6 +98,9 @@ type Handler struct {
 	db               DocumentDB
 	hub              *hub
 	allowCompression bool
+	secretUser       string
+	secretPassword   string
+	webhookURL       string
 }
 
 // NewHandler returns a new Zwibbler Handler. You must pass it a document database to use.
@@ -106,19 +127,41 @@ func (zh *Handler) SetCompressionAllowed(allowed bool) {
 	zh.allowCompression = allowed
 }
 
+// SetSecretUser allow you to set the secret username and password
+// used in Webhooks and to authenticate requests like dumping and
+// deleting documents.
+func (zh *Handler) SetSecretUser(username, password string) {
+	zh.secretUser = username
+	zh.secretPassword = password
+	zh.hub.setWebhook(zh.webhookURL, zh.secretPassword, zh.secretPassword)
+}
+
+// SetWebhookURL sets a url to receive an event, a few minutes after
+// all users have left a session.
+func (zh *Handler) SetWebhookURL(url string) {
+	zh.webhookURL = url
+	zh.hub.setWebhook(zh.webhookURL, zh.secretPassword, zh.secretPassword)
+}
+
 // ServeHTTP ...
 func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Got a connection\n")
-
 	upgradeHeader := r.Header.Get("Upgrade")
 	compression := r.FormValue("compression")
 
 	if !strings.Contains(upgradeHeader, "websocket") {
-		w.Header().Set("Content-type", "text")
-		w.Write([]byte("Zwibbler collaboration Server is running."))
+		var handled bool
+		RecoverErrors(CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handled = zh.serveMAPI(w, r)
+		})))(w, r)
+
+		if !handled && r.Method != "POST" {
+			w.Header().Set("Content-type", "text")
+			w.Write([]byte("Zwibbler collaboration Server is running."))
+		}
 		return
 	}
 
+	log.Printf("Got a connection\n")
 	upgrader := globalUpgrader // copy
 
 	// compression not supported on Windows Server 2016.

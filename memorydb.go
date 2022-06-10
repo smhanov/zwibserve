@@ -11,6 +11,7 @@ type MemoryDocumentDB struct {
 	mutex      sync.Mutex
 	docs       map[string]*document
 	keys       map[string][]Key
+	tokens     map[string]*token
 	lastClean  time.Time
 	expiration int64
 }
@@ -20,11 +21,19 @@ type document struct {
 	lastAccess time.Time
 }
 
+type token struct {
+	docID       string
+	userID      string
+	permissions string
+	expiration  int64
+}
+
 // NewMemoryDB ...
 func NewMemoryDB() DocumentDB {
 	return &MemoryDocumentDB{
-		docs: make(map[string]*document),
-		keys: make(map[string][]Key),
+		docs:   make(map[string]*document),
+		keys:   make(map[string][]Key),
+		tokens: make(map[string]*token),
 	}
 }
 
@@ -58,6 +67,12 @@ func (db *MemoryDocumentDB) clean() {
 		}
 
 		total += cap(doc.data)
+	}
+
+	for tokenid, token := range db.tokens {
+		if token.expiration > time.Now().Unix() {
+			delete(db.tokens, tokenid)
+		}
 	}
 
 	if total > 0 {
@@ -142,4 +157,68 @@ func (db *MemoryDocumentDB) GetDocumentKeys(docID string) ([]Key, error) {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	return db.keys[docID], nil
+}
+
+func (db *MemoryDocumentDB) DeleteDocument(docID string) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+	delete(db.docs, docID)
+	delete(db.keys, docID)
+	return nil
+}
+
+func (db *MemoryDocumentDB) AddToken(tokenIn, docID, userID, permissions string, expirationSeconds int64, contents []byte) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+	if _, ok := db.tokens[tokenIn]; ok {
+		return ErrExists
+	}
+
+	if _, ok := db.docs[docID]; ok && len(contents) != 0 {
+		return ErrConflict
+	}
+
+	db.tokens[tokenIn] = &token{
+		docID:       docID,
+		userID:      userID,
+		permissions: permissions,
+		expiration:  expirationSeconds,
+	}
+
+	if docID != "" {
+		db.docs[docID] = &document{
+			data:       contents,
+			lastAccess: time.Now(),
+		}
+	}
+	return nil
+}
+
+func (db *MemoryDocumentDB) GetToken(tokenID string) (docID, userID, permissions string, err error) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+	err = ErrMissing
+	if token, ok := db.tokens[tokenID]; ok {
+		if time.Now().Unix() > token.expiration {
+			return
+		}
+
+		err = nil
+		docID = token.docID
+		userID = token.userID
+		permissions = token.permissions
+	}
+
+	return
+}
+
+func (db *MemoryDocumentDB) UpdateUser(userid, permissions string) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+	for _, token := range db.tokens {
+		if token.userID == userid {
+			token.permissions = permissions
+		}
+	}
+	return nil
 }

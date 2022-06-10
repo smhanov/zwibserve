@@ -1,0 +1,143 @@
+package zwibserve
+
+import (
+	"log"
+	"net/http"
+	"time"
+)
+
+// This file implements the server management API
+// https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit#
+
+func (zh *Handler) serveMAPI(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == "POST" {
+		method := r.FormValue("method")
+
+		switch method {
+		case "addToken":
+			zh.handleAddToken(w, r)
+		case "updateUser":
+			zh.handleUpdateUser(w, r)
+		case "createDocument":
+			zh.handleCreateDocument(w, r)
+		case "deleteDocument":
+			zh.handleDeleteDocument(w, r)
+		case "dumpDocument":
+			zh.handleDumpDocument(w, r)
+		default:
+			HTTPPanic(400, "Unknown 'method' parameter")
+		}
+		return true
+	}
+	return false
+}
+
+func (zh *Handler) verifyAuth(r *http.Request) {
+	username, password, ok := r.BasicAuth()
+	if !ok || username != zh.secretUser || password != zh.secretPassword {
+		log.Printf("    Request not authorized; got %s/%s", username, password)
+		HTTPPanic(401, "Unauthorized")
+	}
+}
+
+func mustGet(r *http.Request, key string) string {
+	value := r.FormValue(key)
+	if value == "" {
+		HTTPPanic(400, "Missing "+key)
+	}
+	return value
+}
+
+func (zh *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Got request for createDocument")
+	zh.verifyAuth(r)
+
+	docID := mustGet(r, "documentID")
+	contents := mustGet(r, "contents")
+
+	_, _, err := zh.db.GetDocument(docID, AlwaysCreate, []byte(contents))
+	if err == ErrExists {
+		w.WriteHeader(409)
+		return
+	} else if err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(200)
+}
+
+func (zh *Handler) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Got request for deleteDocument")
+	zh.verifyAuth(r)
+
+	docID := mustGet(r, "documentID")
+	zh.hub.signalDocumentDeleted(docID)
+	err := zh.db.DeleteDocument(docID)
+	if err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(200)
+}
+
+func (zh *Handler) handleDumpDocument(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Got request for dumpDocument")
+	zh.verifyAuth(r)
+
+	docID := mustGet(r, "documentID")
+
+	contents, _, err := zh.db.GetDocument(docID, NeverCreate, nil)
+
+	if err == ErrMissing {
+		w.WriteHeader(404)
+		return
+	} else if err != nil {
+		log.Panic(err)
+	}
+
+	w.Header().Set("Content-Type", "text")
+	w.Write(contents)
+}
+
+func (zh *Handler) handleAddToken(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Got request for addToken")
+	zh.verifyAuth(r)
+	docID := mustGet(r, "documentID")
+	token := mustGet(r, "token")
+	userID := mustGet(r, "userID")
+	permissions := r.FormValue("permissions")
+	contents := r.FormValue("contents")
+	expiration := mustGet(r, "expiration")
+
+	expirationTime, err := time.Parse(time.RFC1123, expiration)
+	if err != nil {
+		HTTPPanic(400, "Incorrect expires format")
+	}
+
+	err = zh.db.AddToken(token, docID, userID, permissions, expirationTime.Unix(), []byte(contents))
+	log.Printf("AddToken %s for doc %s user %s", token, docID, userID)
+	if err == ErrExists || err == ErrConflict {
+		w.WriteHeader(409)
+	} else if err != nil {
+		log.Printf("Error is %v", err)
+		log.Panic(err)
+	} else {
+		w.WriteHeader(200)
+	}
+}
+
+func (zh *Handler) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Got request for updateUser")
+	zh.verifyAuth(r)
+	userID := mustGet(r, "userID")
+	permissions := r.FormValue("permissions")
+
+	err := zh.db.UpdateUser(userID, permissions)
+
+	if err != nil {
+		log.Panic(err)
+	}
+
+	zh.hub.updatePermissions(userID, permissions)
+	w.WriteHeader(200)
+}

@@ -2,6 +2,7 @@ package zwibserve
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,10 @@ type client struct {
 	id    int64
 	ws    *websocket.Conn
 	docID string
+
+	// for tokens
+	userID          string
+	writePermission bool
 
 	db  DocumentDB
 	hub *hub
@@ -235,11 +240,31 @@ func (c *client) enqueue(message interface{}) {
 	c.wakeup.Signal()
 }
 
-func (c *client) enqueueError(code uint16, text string) {
+type errorCode uint16
+
+const (
+	errorUnspecified   errorCode = 0
+	errorDoesNotExist  errorCode = 1
+	errorInvalidOffset errorCode = 3
+	errorAccessDenied  errorCode = 4
+)
+
+var errorStrings = []string{
+	"unspecified",
+	"does not exist",
+	"already exists",
+	"invalid offset",
+	"access denied",
+}
+
+func (c *client) enqueueError(code errorCode, text string) {
 	log.Printf("Client %v error: %s", c.id, text)
+	if text == "" && int(code) < len(errorStrings) {
+		text = errorStrings[code]
+	}
 	c.enqueue(errorMessage{
 		MessageType: 0x80,
-		ErrorCode:   code,
+		ErrorCode:   uint16(code),
 		Description: text,
 	})
 }
@@ -260,19 +285,11 @@ func (c *client) enqueueBroadcast(data []byte) {
 	})
 }
 
-func (c *client) enqueueAckNack(ack bool, length uint64) {
-	var Ack uint16
-	if ack {
-		log.Printf("Client %v << ACK", c.id)
-		Ack = 0x01
-	} else {
-		log.Printf("Client %v << NACK", c.id)
-		Ack = 0x00
-	}
+func (c *client) enqueueAckNack(ack uint16, length uint64) {
 
 	c.enqueue(ackNackMessage{
 		MessageType: 0x81,
-		Ack:         Ack,
+		Ack:         ack,
 		Offset:      length,
 	})
 }
@@ -317,7 +334,35 @@ func (c *client) processInitMessage(data []uint8) bool {
 		c.maxSize = int(m.MaxMessageSize)
 	}
 
-	c.docID = m.DocID
+	errorCodeOnMissing := errorDoesNotExist
+
+	// check if its a token
+	realDocID, userID, permissions, err := c.db.GetToken(m.DocID)
+	if err == nil {
+		log.Printf("Token %s maps to doc %s", m.DocID, realDocID)
+		c.docID = realDocID
+		c.writePermission = strings.Contains(permissions, "w")
+		c.userID = userID
+
+		if !strings.Contains(permissions, "r") ||
+			m.CreationMode == AlwaysCreate && !c.writePermission {
+			c.enqueueError(errorAccessDenied, "")
+			return false
+		}
+
+		if !c.writePermission && m.CreationMode == PossiblyCreate {
+			m.CreationMode = NeverCreate
+			errorCodeOnMissing = errorAccessDenied
+		}
+
+	} else if err == ErrMissing {
+		c.docID = m.DocID
+		c.writePermission = true
+	} else {
+		c.enqueueError(0, err.Error())
+		return false
+	}
+
 	initialData := m.Data
 
 	// look up document id
@@ -330,7 +375,7 @@ func (c *client) processInitMessage(data []uint8) bool {
 		case ErrExists:
 			c.enqueueError(0x0002, "already exists")
 		case ErrMissing:
-			c.enqueueError(0x0001, "does not exist")
+			c.enqueueError(errorCodeOnMissing, "")
 		default:
 			c.enqueueError(0, err.Error())
 		}
@@ -361,15 +406,22 @@ func (c *client) processAppend(data []uint8) bool {
 		return false
 	}
 
+	if !c.writePermission {
+		log.Printf("Nack. no permission to write")
+		m.Data = nil
+	}
+
 	// attempt to append to document
 	newLength, err := c.db.AppendDocument(c.docID, m.Offset, m.Data)
 
-	if err == nil {
-		c.enqueueAckNack(true, newLength)
+	if err == nil && c.writePermission {
+		c.enqueueAckNack(0x01, newLength)
 		c.hub.append(c.docID, c, m.Offset, m.Data)
+	} else if err == nil && !c.writePermission {
+		c.enqueueAckNack(0x02, newLength)
 	} else if err == ErrConflict {
 		log.Printf("Nack. offset should be %d not %d", newLength, m.Offset)
-		c.enqueueAckNack(false, newLength)
+		c.enqueueAckNack(0x00, newLength)
 	} else if err == ErrMissing {
 		log.Printf("ErrMissing during append: %s does not exist", c.docID)
 		c.enqueueError(0x0001, "does not exist")
@@ -445,5 +497,23 @@ outer:
 
 	if added {
 		c.wakeup.Signal()
+	}
+}
+
+// The client has lost access to the document.
+func (c *client) notifyLostAccess(code errorCode) {
+	log.Printf("    Client %v lost access to the document. Closing connection.", c.id)
+	c.enqueueError(code, "")
+	c.mutex.Lock()
+	c.closed = true
+	c.mutex.Unlock()
+}
+
+func (c *client) notifyPermissionChange(permissions string) {
+	c.mutex.Lock()
+	c.writePermission = strings.Contains(permissions, "w")
+	c.mutex.Unlock()
+	if !strings.Contains(permissions, "r") {
+		c.notifyLostAccess(errorAccessDenied)
 	}
 }

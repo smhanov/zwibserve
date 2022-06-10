@@ -1,10 +1,17 @@
 package zwibserve
 
-import "log"
+import (
+	"log"
+	"time"
+)
 
 type hub struct {
-	ch       chan func()
-	sessions map[string]*session
+	ch             chan func()
+	sessions       map[string]*session
+	hooks          *webhookQueue
+	webhookURL     string
+	secretUser     string
+	secretPassword string
 }
 
 type session struct {
@@ -21,6 +28,7 @@ func newHub() *hub {
 	h := &hub{
 		ch:       make(chan func()),
 		sessions: make(map[string]*session),
+		hooks:    createWebhookQueue(),
 	}
 
 	go func() {
@@ -40,10 +48,37 @@ func (h *hub) addClient(docID string, c *client) {
 			h.sessions[docID] = &session{
 				clients: []*client{c},
 			}
+
+			// remove any queued idle-session webhook
+			h.hooks.removeIf(func(event webhookEvent) bool {
+				return event.name == "idle-session" && event.documentID == docID
+			})
 		} else {
 			s.clients = append(s.clients, c)
 		}
 	}
+}
+
+// Immediately disconnect all clients and remove records of the document.
+func (h *hub) signalDocumentDeleted(docID string) {
+	h.ch <- func() {
+		sess := h.sessions[docID]
+		if sess != nil {
+			log.Printf("Document deleted with %v clients: %v", len(sess.clients), docID)
+			for _, client := range sess.clients {
+				client.notifyLostAccess(errorDoesNotExist)
+				// will be removed through normal mechanism.
+			}
+		} else {
+			log.Printf("Doc %s has no clients.", docID)
+		}
+	}
+}
+
+func (h *hub) setWebhook(url, user, password string) {
+	h.webhookURL = url
+	h.secretUser = user
+	h.secretPassword = password
 }
 
 func (h *hub) removeClient(docID string, c *client) {
@@ -58,6 +93,18 @@ func (h *hub) removeClient(docID string, c *client) {
 				sess.clients = list
 				if len(list) == 0 {
 					delete(h.sessions, docID)
+
+					// enqueue webhook
+					if h.webhookURL != "" {
+						h.hooks.add(webhookEvent{
+							name:       "idle-session",
+							url:        h.webhookURL,
+							username:   h.secretUser,
+							password:   h.secretPassword,
+							documentID: docID,
+							sendBy:     time.Now().Add(10 * time.Second),
+						})
+					}
 				}
 				break
 			}
@@ -188,4 +235,16 @@ func (h *hub) getClientKeys(docID string) []Key {
 
 	<-reply
 	return keys
+}
+
+func (h *hub) updatePermissions(userid string, permissions string) {
+	h.ch <- func() {
+		for _, session := range h.sessions {
+			for _, client := range session.clients {
+				if client.userID == userid {
+					client.notifyPermissionChange(permissions)
+				}
+			}
+		}
+	}
 }
