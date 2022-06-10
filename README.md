@@ -4,7 +4,7 @@ Package zwibserve is an example collaboration server for zwibbler.com. It lets u
 
 The collaboration works similar to source control. When I try to submit my changes, and you have submitted yours first, then my changes are rejected by the server. I must then modify my changes so they no longer conflict with yours, and try to submit them again.
 
-The protocol is described in [Zwibbler Collaboration Server Protocol V2](https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing)
+The protocol is described in [Zwibbler Collaboration Server Protocol V2](https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing). There are additional methods that add security and the ability to delete documents described in [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing).
 
 [Test your server online](https://zwibbler.com/collaboration/testing.html).
 
@@ -126,6 +126,17 @@ To use redis, add these lines to the zwibbler.conf file:
     # Default: localhost:6379
     RedisServer=
     RedisPassword=
+    
+## Advanced options
+The [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing) adds additional security, so that a student will be unable to write to a teacher's whiteboard unless given permission to do so. In this case, you must configure a username and password, and configure your own server software make a request to add a token with permissions before each persion connects to a session. That way, participants  connect using a token instead of a session identifier, and the permissions are enforced by the collaboration server instead of the client browser. Any management requests are authenticated using HTTP Basic Authentication with the given username and password.
+
+    # If set, the management API is enabled to allow deleting and dumping documents.
+    SecretUser=
+    SecretPassword=
+
+    # If set, this webhook will be called when all users have left a session.
+    # See the API documents on Google Drive for details.
+    Webhook=
 
 ## Using it from a go project
 This is a go package. To run it, you will create a main program like this:
