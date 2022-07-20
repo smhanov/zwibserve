@@ -5,6 +5,14 @@ import (
 	"reflect"
 )
 
+const (
+	initMessageType         = 0x01
+	appendMessageType       = 0x02
+	errorMessageType        = 0x80
+	ackNackMessageType      = 0x81
+	continuationMessageType = 0xff
+)
+
 type initMessage struct {
 	MessageType     uint8
 	More            uint8

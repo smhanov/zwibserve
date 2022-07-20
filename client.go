@@ -70,7 +70,7 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 	// wait up to 30 seconds for init message
 	ws.SetReadDeadline(time.Now().Add(30 * time.Second))
 
-	message, err := c.readMessage()
+	message, err := readMessage(c.ws)
 	if err != nil {
 		log.Printf("%d: error waiting for init message: %v", c.id, err)
 		return
@@ -92,7 +92,7 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 	ws.SetReadDeadline(time.Time{})
 
 	for {
-		message, err = c.readMessage()
+		message, err = readMessage(c.ws)
 		if err != nil {
 			log.Printf("client for %s disconnected", c.docID)
 			break
@@ -166,11 +166,11 @@ func (c *client) writeThread() {
 
 // Reads a complete message, taking into account the MORE byte to
 // join continuation messages together.
-func (c *client) readMessage() ([]uint8, error) {
+func readMessage(conn *websocket.Conn) ([]uint8, error) {
 	// only to be called from runClient
 	var buffer []byte
 	for {
-		_, p, err := c.ws.ReadMessage()
+		_, p, err := conn.ReadMessage()
 		if err != nil {
 			return nil, err
 		}
