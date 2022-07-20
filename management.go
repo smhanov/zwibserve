@@ -1,6 +1,7 @@
 package zwibserve
 
 import (
+	"crypto/subtle"
 	"log"
 	"net/http"
 	"time"
@@ -34,7 +35,9 @@ func (zh *Handler) serveMAPI(w http.ResponseWriter, r *http.Request) bool {
 
 func (zh *Handler) verifyAuth(r *http.Request) {
 	username, password, ok := r.BasicAuth()
-	if !ok || username != zh.secretUser || password != zh.secretPassword {
+	eq1 := subtle.ConstantTimeCompare([]byte(username), []byte(zh.secretUser))
+	eq2 := subtle.ConstantTimeCompare([]byte(password), []byte(zh.secretPassword))
+	if !ok || eq1 != 0 || eq2 != 0 {
 		log.Printf("    Request not authorized; got %s/%s", username, password)
 		HTTPPanic(401, "Unauthorized")
 	}
