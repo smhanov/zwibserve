@@ -224,7 +224,7 @@ func studentClient(args *stressTestArgs, clientID int) {
 	for !args.abort {
 		m := readAppendMessage(conn)
 		if !first && len(m.Data) >= 4 {
-			diff := (time.Now().UnixMilli() & 0xffffffff) - decodeSendingMS(m.Data)
+			diff := (getUnixMilli() & 0xffffffff) - decodeSendingMS(m.Data)
 			args.recordPingTime(diff, int64(m.Offset)+int64(len(m.Data)))
 		}
 		first = false
@@ -346,7 +346,7 @@ func teacherClient(args *stressTestArgs, clientID int) {
 
 			mutex.Unlock()
 			if len(m.Data) > 0 {
-				diff := (time.Now().UnixMilli() & 0xffffffff) - decodeSendingMS(m.Data)
+				diff := (getUnixMilli() & 0xffffffff) - decodeSendingMS(m.Data)
 				args.recordPingTime(diff, int64(m.Offset)+int64(len(m.Data)))
 			}
 
@@ -380,8 +380,14 @@ func teacherClient(args *stressTestArgs, clientID int) {
 	}
 }
 
+// UnixMilli() was added recently to go. Use this instead so we can 
+// build on older versions.
+func getUnixMilli() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
 func encodeSendingMS(bytes []byte) {
-	ts := time.Now().UnixMilli()
+	ts := getUnixMilli()
 	bytes[0] = byte((ts >> 24) & 0xff)
 	bytes[1] = byte((ts >> 16) & 0xff)
 	bytes[2] = byte((ts >> 8) & 0xff)
