@@ -128,7 +128,9 @@ To use redis, add these lines to the zwibbler.conf file:
     RedisPassword=
     
 ## Advanced options
-The [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing) adds additional security, so that a student will be unable to write to a teacher's whiteboard unless given permission to do so. In this case, you must configure a username and password, and configure your own server software make a request to add a token with permissions before each persion connects to a session. That way, participants  connect using a token instead of a session identifier, and the permissions are enforced by the collaboration server instead of the client browser. Any management requests are authenticated using HTTP Basic Authentication with the given username and password.
+
+### Security
+The [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing) adds additional security, so that a skilled student hacker will be unable to alter the Javascript and write to a teacher's whiteboard unless given permission to do so. In this case, you must configure a username and password, and configure your own server software make a request to add a token with permissions before each persion connects to a session. That way, participants  connect using a token instead of a session identifier, and the permissions are enforced by the collaboration server instead of the client browser. Any management requests are authenticated using HTTP Basic Authentication with the given username and password.
 
     # If set, the management API is enabled to allow deleting and dumping documents.
     SecretUser=
@@ -137,6 +139,40 @@ The [Zwibbler Collaboration Server Management API](https://docs.google.com/docum
     # If set, this webhook will be called when all users have left a session.
     # See the API documents on Google Drive for details.
     Webhook=
+    
+    
+### Increasing maximum number of connections
+To support more than 1024 connections on Linux, you will have to increase your system limit on the number of file handles. This is often done by adding these lines to /etc/security/limits.conf:
+
+    * hard nofiles 100000
+    * soft nofiles 100000
+    
+To tell Zwibbler to take advantage of these limits, you set MaxFiles to the same value in /etc/zwibbler.conf:
+    
+    # Attempt to set the open file limit of the operating system to this value.
+    # This must be less than or equal to the hard limit of the operating system.
+     MaxFiles=100000
+     
+## Load testing
+The current load testing results are available in the [Zwibbler Collaboration Server Load Testing](https://docs.google.com/document/d/1P6wzmka-C3ZbJXgfFGjYgR1v4be3GkLw6tclpwzZn5s/edit?usp=sharing) guide. A single server can support many thousands of connections, even when using the built-in SQLITE database.
+
+The collaboration server has command line options that enable it to perform load testing on a server on another machine. It does this by simulating a number of participants viewing and writing to a single whiteboard. These are termed students and teachers.
+
+| Command | Description |
+| --- | --- |
+| --test <socket url> | Test the server at the given websocket url (eg. ws://yourserver:3000/socket) |
+| --docid <string> | The name of the whiteboard all participants connect to |
+| --teachers <number> | The number of teachers to simulate. |
+| --students <number> | The number of students to simulate. |
+| --verbose | Show all actions from every student and teacher |
+
+All initial connections will be made over a few seconds, to avoid a long backlog. A simulated student simply connects to the whiteboard and receives the initial contents as well as updates from it. A teacher will connect, and continuously update the whiteboard with new changes as well as receiving updates from other teachers. The teachers make changes at random intervals that average to one second. If there are multiple teachers, the changes may conflict and have to be resent. The test continues until stopped by the user using CTRL-C.
+
+During the test you will see statistics about the test, including the screen-to-screen time. This is the amount of time between when a teacher makes a change to when a student sees that change on his whiteboard.
+
+     Connections=51 docLength=149360 Screen-to-screen time avg=71ms min=19ms max=958ms
+
+The changes are nonsensical data, not real whiteboard commands, so the real zwibbler will be unable to connect to the document used.
 
 ## Using it from a go project
 This is a go package. To run it, you will create a main program like this:
