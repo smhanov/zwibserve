@@ -3,6 +3,7 @@ package zwibserve
 import (
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -37,7 +38,6 @@ type StressTestArgs struct {
 	Verbose bool
 }
 
-const maxPingTimes = 10000
 const randomConnectTime = 3000
 const defaultChangeLength = 10
 
@@ -51,12 +51,15 @@ type stressTestArgs struct {
 	abort bool
 
 	mutex sync.Mutex
-	// wrap-around buffer of ping times for avg / min / max calculations
-	pingTimes     []int64
-	nextPingIndex int
-	lastShowTime  time.Time
-	numConnected  int
-	docLength     int64
+	// running average of round trip times for avg / min / max calculations
+	pingTime     float64
+	numSamples   float64
+	minTime      float64
+	maxTime      float64
+	lastShowTime time.Time
+	numConnected int
+	maxPingTimes int // number of ping times to include in average
+	docLength    int64
 }
 
 func (args *stressTestArgs) recordPingTime(value int64, docLength int64) {
@@ -65,17 +68,18 @@ func (args *stressTestArgs) recordPingTime(value int64, docLength int64) {
 	if docLength > args.docLength {
 		args.docLength = docLength
 	}
-	if len(args.pingTimes) < maxPingTimes {
-		args.pingTimes = append(args.pingTimes, value)
+
+	fv := float64(value)
+
+	if args.numSamples > 0 {
+		args.minTime = math.Min(args.minTime, fv)
+		args.maxTime = math.Max(args.maxTime, fv)
 	} else {
-
-		args.pingTimes[args.nextPingIndex] = value
-
-		args.nextPingIndex++
-		if args.nextPingIndex == maxPingTimes {
-			args.nextPingIndex = 0
-		}
+		args.minTime = fv
+		args.maxTime = fv
 	}
+	args.numSamples += 1.0
+	args.pingTime = args.pingTime*((args.numSamples-1)/args.numSamples) + fv/args.numSamples
 
 	args.showStats()
 }
@@ -93,31 +97,12 @@ func (args *stressTestArgs) showStats() {
 		return
 	}
 	args.lastShowTime = time.Now()
-	var sum, min, max, avg int64
-
-	if len(args.pingTimes) > 0 {
-		sum = args.pingTimes[0]
-		min = args.pingTimes[0]
-		max = args.pingTimes[0]
-
-		for i := 1; i < len(args.pingTimes); i++ {
-			v := args.pingTimes[i]
-			sum += v
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
-		}
-		avg = int64(float64(sum) / float64(len(args.pingTimes)))
-	}
 
 	str := fmt.Sprintf("Connections=%d docLength=%d Screen-to-screen time avg=%dms min=%dms max=%dms      ",
 		args.numConnected,
 		args.docLength,
-		avg,
-		min, max)
+		int(args.pingTime),
+		int(args.minTime), int(args.maxTime))
 
 	if args.Verbose {
 		log.Print(str)
@@ -139,6 +124,9 @@ func RunStressTest(argsIn StressTestArgs) {
 	if args.DelayMS == 0 {
 		args.DelayMS = 1000
 	}
+
+	// try to smooth the average over five seconds
+	args.maxPingTimes = (args.NumTeachers + args.NumStudents) * 5
 
 	id := 1
 	for i := 0; i < args.NumStudents; i++ {
@@ -323,6 +311,8 @@ func teacherClient(args *stressTestArgs, clientID int) {
 		}
 	}()
 
+	first := true
+
 	// reading thread
 	for !args.abort {
 		bytes := readStressMessage(conn)
@@ -345,10 +335,11 @@ func teacherClient(args *stressTestArgs, clientID int) {
 			}
 
 			mutex.Unlock()
-			if len(m.Data) > 0 {
+			if len(m.Data) > 0 && !first {
 				diff := (getUnixMilli() & 0xffffffff) - decodeSendingMS(m.Data)
 				args.recordPingTime(diff, int64(m.Offset)+int64(len(m.Data)))
 			}
+			first = false
 
 		} else if bytes[0] == ackNackMessageType {
 			var m ackNackMessage
@@ -380,7 +371,7 @@ func teacherClient(args *stressTestArgs, clientID int) {
 	}
 }
 
-// UnixMilli() was added recently to go. Use this instead so we can 
+// UnixMilli() was added recently to go. Use this instead so we can
 // build on older versions.
 func getUnixMilli() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
