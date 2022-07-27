@@ -135,12 +135,11 @@ func (h *hub) removeClient(docID string, c *client) {
 
 func (h *hub) append(docID string, source *client, offset uint64, data []uint8) {
 	h.ch <- func() {
-		log.Printf("client %v appends %v bytes offset %v: %s", source.id,
-			len(data), offset, string(data))
+		log.Printf("client %v appends %v bytes offset %v, send to %v other clients", source.id,
+			len(data), offset, len(h.sessions[docID].clients)-1)
 
 		for _, other := range h.sessions[docID].clients {
 			if other != source {
-				log.Printf("... send to client %d", other.id)
 				other.enqueueAppend(data, offset)
 			}
 		}
@@ -149,12 +148,11 @@ func (h *hub) append(docID string, source *client, offset uint64, data []uint8) 
 
 func (h *hub) broadcast(docID string, source *client, data []uint8) {
 	h.ch <- func() {
-		log.Printf("client %v broadcasts %v bytes: %s", source.id,
-			len(data), string(data))
+		log.Printf("client %v broadcasts %v bytes to %v other clients", source.id,
+			len(data), len(h.sessions[docID].clients)-1)
 
 		for _, other := range h.sessions[docID].clients {
 			if other != source {
-				log.Printf("... send to client %d", other.id)
 				other.enqueueBroadcast(data)
 			}
 		}
@@ -165,7 +163,6 @@ func (h *hub) setSessionKey(docID string, source *client, key Key) {
 	h.ch <- func() {
 		for _, other := range h.sessions[docID].clients {
 			if other != source {
-				log.Printf("... send to client %d", other.id)
 				other.notifyKeysUpdated([]Key{key})
 			}
 		}
@@ -208,7 +205,6 @@ func (h *hub) setClientKey(docID string, source *client, oldVersion, newVersion 
 		if found {
 			for _, other := range h.sessions[docID].clients {
 				if other != source {
-					log.Printf("... send to client %d", other.id)
 					other.notifyKeysUpdated([]Key{newKey.Key})
 				}
 			}

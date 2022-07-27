@@ -420,7 +420,7 @@ func (c *client) processAppend(data []uint8) bool {
 	} else if err == nil && !c.writePermission {
 		c.enqueueAckNack(0x02, newLength)
 	} else if err == ErrConflict {
-		log.Printf("Nack. offset should be %d not %d", newLength, m.Offset)
+		//log.Printf("Nack. offset should be %d not %d", newLength, m.Offset)
 		c.enqueueAckNack(0x00, newLength)
 	} else if err == ErrMissing {
 		log.Printf("ErrMissing during append: %s does not exist", c.docID)
