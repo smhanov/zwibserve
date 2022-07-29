@@ -37,7 +37,7 @@ func (zh *Handler) verifyAuth(r *http.Request) {
 	username, password, ok := r.BasicAuth()
 	eq1 := subtle.ConstantTimeCompare([]byte(username), []byte(zh.secretUser))
 	eq2 := subtle.ConstantTimeCompare([]byte(password), []byte(zh.secretPassword))
-	if !ok || eq1 != 0 || eq2 != 0 {
+	if !ok || eq1 == 0 || eq2 == 0 || (zh.secretUser == "" && zh.secretPassword == "") {
 		log.Printf("    Request not authorized; got %s/%s", username, password)
 		HTTPPanic(401, "Unauthorized")
 	}
