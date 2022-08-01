@@ -107,6 +107,6 @@ func (event webhookEvent) send() {
 		Password: event.password,
 	}, &reply)
 
-	log.Printf("%s/%s to %s: Status %v", event.name, event.documentID, event.url,
-		result.StatusCode)
+	log.Printf("%s/%s to %s: HTTP Status=%v Error=%v", event.name, event.documentID, event.url,
+		result.StatusCode, result.Err)
 }
