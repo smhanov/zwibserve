@@ -133,14 +133,14 @@ func (zh *Handler) SetCompressionAllowed(allowed bool) {
 func (zh *Handler) SetSecretUser(username, password string) {
 	zh.secretUser = username
 	zh.secretPassword = password
-	zh.hub.setWebhook(zh.webhookURL, zh.secretPassword, zh.secretPassword)
+	zh.hub.setWebhook(zh.webhookURL, zh.secretUser, zh.secretPassword)
 }
 
 // SetWebhookURL sets a url to receive an event, a few minutes after
 // all users have left a session.
 func (zh *Handler) SetWebhookURL(url string) {
 	zh.webhookURL = url
-	zh.hub.setWebhook(zh.webhookURL, zh.secretPassword, zh.secretPassword)
+	zh.hub.setWebhook(zh.webhookURL, zh.secretUser, zh.secretPassword)
 }
 
 // ServeHTTP ...
