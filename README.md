@@ -4,7 +4,7 @@ Package zwibserve is an example collaboration server for zwibbler.com. It lets u
 
 The collaboration works similar to source control. When I try to submit my changes, and you have submitted yours first, then my changes are rejected by the server. I must then modify my changes so they no longer conflict with yours, and try to submit them again.
 
-The protocol is described in [Zwibbler Collaboration Server Protocol V2](https://docs.google.com/document/d/1X3_fzFqPUzTbPqF2GrYlSveWuv_L-xX7Cc69j13i6PY/edit?usp=sharing). There are additional methods that add security and the ability to delete documents described in [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing).
+The protocol is described in [Zwibbler Collaboration Server Protocol V3](https://docs.google.com/document/d/1l2BsVVsP6mD_BuzErIdD8ig1ICur6D3V0vrYQVWJTDQ/edit?usp=sharing). There are additional methods that add security and the ability to delete documents described in [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing).
 
 [Test your server online](https://zwibbler.com/collaboration/testing.html).
 
@@ -139,7 +139,16 @@ The [Zwibbler Collaboration Server Management API](https://docs.google.com/docum
     # If set, this webhook will be called when all users have left a session.
     # See the API documents on Google Drive for details.
     Webhook=
-    
+
+
+### JWT (Javascript Web Tokens)
+If desired, the server can be configured to only accept session identifiers contained inside of a JWT. The JWT also contains permission information, but are signed using a preconfigured key. That way, only authorized individuals will be able to write to a whiteboard. Using JWT means that the tokens do not need to be registered in advance with the collaboration server. The format of the tokens is described in [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit#heading=h.wrucymxrj81i)
+
+    # If set, only JWT tokens will be accepted as document identifiers from the client.
+    # The HMAC-SHA256 signature method is used.
+    JWTKey=
+    JWTKeyIsBase64=False
+
     
 ### Increasing maximum number of connections
 To support more than 1024 connections on Linux, you will have to increase your system limit on the number of file handles. This is often done by adding these lines to /etc/security/limits.conf:

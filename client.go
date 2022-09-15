@@ -1,6 +1,8 @@
 package zwibserve
 
 import (
+	"encoding/base64"
+	"errors"
 	"log"
 	"strings"
 	"sync"
@@ -8,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 // Default maximum message size
@@ -17,9 +21,10 @@ const maxMessageSize = 100 * 1024
 var nextClientNumber int64
 
 type client struct {
-	id    int64
-	ws    *websocket.Conn
-	docID string
+	id              int64
+	ws              *websocket.Conn
+	protocolVersion uint16
+	docID           string
 
 	// for tokens
 	userID          string
@@ -98,7 +103,7 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 			break
 		}
 
-		if message[0] == 0x02 {
+		if message[0] == 0x02 || message[0] == 0x05 {
 			if !c.processAppend(message) {
 				break
 			}
@@ -111,7 +116,7 @@ func runClient(hub *hub, db DocumentDB, ws *websocket.Conn) {
 				break
 			}
 		} else {
-			log.Printf("client %v sent unepected message type %v", c.id, message[0])
+			log.Printf("client %v sent unexpected message type %v", c.id, message[0])
 		}
 	}
 }
@@ -270,8 +275,18 @@ func (c *client) enqueueError(code errorCode, text string) {
 }
 
 func (c *client) enqueueAppend(data []byte, offset uint64) {
+	if c.protocolVersion < 3 {
+		c.enqueue(appendMessageV2{
+			MessageType: appendV2MessageType,
+			Offset:      offset,
+			Data:        data,
+		})
+		return
+	}
+
 	c.enqueue(appendMessage{
-		MessageType: 0x02,
+		MessageType: appendMessageType,
+		Generation:  0, // Future feature
 		Offset:      offset,
 		Data:        data,
 	})
@@ -312,9 +327,52 @@ func (c *client) enqueueSetKeyAckNack(ack bool, requestID uint16) {
 
 }
 
+// Decode both the V2 and V3 version into the V3 version.
+func decodeInitMessage(m *initMessage, data []uint8) error {
+	if len(data) > 4 && data[0] == initMessageType &&
+		data[2] == 0 && data[3] == 2 {
+		// protocol version 2
+		var m2 initMessageV2
+		err := decode(&m2, data)
+		if err != nil {
+			return err
+		}
+
+		m.MessageType = m2.MessageType
+		m.More = m2.More
+		m.ProtocolVersion = m2.ProtocolVersion
+		m.MaxMessageSize = m2.MaxMessageSize
+		m.CreationMode = m2.CreationMode
+		m.Offset = m2.Offset
+		m.DocIDLength = uint32(m2.DocIDLength)
+		m.DocID = m2.DocID
+		m.Data = m2.Data
+		return nil
+	}
+
+	return decode(m, data)
+}
+
+// decode both append and append_v2 into the append message
+func decodeAppendMessage(m *appendMessage, data []uint8) error {
+	if data[0] == appendV2MessageType {
+		var m2 appendMessageV2
+		err := decode(&m2, data)
+		if err != nil {
+			return err
+		}
+		m.MessageType = m2.MessageType
+		m.More = m2.More
+		m.Offset = m2.Offset
+		m.Data = m2.Data
+		return nil
+	}
+	return decode(m, data)
+}
+
 func (c *client) processInitMessage(data []uint8) bool {
 	var m initMessage
-	err := decode(&m, data)
+	err := decodeInitMessage(&m, data)
 	if err != nil {
 		log.Printf("Client %v: %v", c.id, err)
 		return false
@@ -325,10 +383,11 @@ func (c *client) processInitMessage(data []uint8) bool {
 		return false
 	}
 
-	if m.ProtocolVersion != 2 {
+	if m.ProtocolVersion != 2 && m.ProtocolVersion != 3 {
 		log.Printf("Client %v: protocol versiom must be 2", c.id)
 		return false
 	}
+	c.protocolVersion = m.ProtocolVersion
 
 	if m.MaxMessageSize != 0 {
 		c.maxSize = int(m.MaxMessageSize)
@@ -338,6 +397,12 @@ func (c *client) processInitMessage(data []uint8) bool {
 
 	// check if its a token
 	realDocID, userID, permissions, err := c.db.GetToken(m.DocID)
+
+	if err == ErrMissing && c.hub.jwtKey != "" {
+		// interpret as JWT token
+		realDocID, userID, permissions, err = c.decodeJWT(m.DocID)
+	}
+
 	if err == nil {
 		log.Printf("Token %s maps to doc %s", m.DocID, realDocID)
 		c.docID = realDocID
@@ -355,9 +420,12 @@ func (c *client) processInitMessage(data []uint8) bool {
 			errorCodeOnMissing = errorAccessDenied
 		}
 
-	} else if err == ErrMissing {
+	} else if err == ErrMissing && c.hub.jwtKey == "" {
 		c.docID = m.DocID
 		c.writePermission = true
+	} else if (err == ErrMissing || err == errTokenExpired || err == errSignatureInvalid) && c.hub.jwtKey != "" {
+		c.enqueueError(0x0004, "access denied")
+		return false
 	} else {
 		c.enqueueError(0, err.Error())
 		return false
@@ -398,9 +466,67 @@ func (c *client) processInitMessage(data []uint8) bool {
 	return true
 }
 
+type claims struct {
+	jwt.StandardClaims
+	UserID      string `json:"u"`
+	Permissions string `json:"p"`
+}
+
+var errTokenExpired error
+var errSignatureInvalid error
+
+func init() {
+	errTokenExpired = errors.New("token expired")
+	errSignatureInvalid = errors.New("signature invalid")
+}
+
+func (c *client) decodeJWT(tokenString string) (realDocID string, userID string, permissions string, err error) {
+	// decode JWT token and verify signature using JSON Web Keyset
+	// pass your custom claims to the parser function
+	var token *jwt.Token
+	token, err = jwt.ParseWithClaims(tokenString, &claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+
+		var key []byte
+		var err error
+		if c.hub.keyIsBase64 {
+			key, err = base64.StdEncoding.DecodeString(c.hub.jwtKey)
+		} else {
+			key = []byte(c.hub.jwtKey)
+		}
+
+		return key, err
+	})
+
+	// type-assert `Claims` into a variable of the appropriate type
+	if err == nil {
+		myClaims := token.Claims.(*claims)
+
+		now := time.Now().Unix()
+		if myClaims.ExpiresAt <= now {
+			log.Printf("User's JWT Token has expired. Token: %d Now is: %d", myClaims.ExpiresAt, now)
+			err = ErrMissing
+		}
+
+		realDocID = myClaims.Subject
+		userID = myClaims.UserID
+		permissions = myClaims.Permissions
+	} else {
+		bits := err.(*jwt.ValidationError).Errors
+		if bits&jwt.ValidationErrorExpired != 0 {
+			err = errTokenExpired
+		} else if bits&jwt.ValidationErrorSignatureInvalid != 0 {
+			err = errSignatureInvalid
+		}
+	}
+	return
+}
+
 func (c *client) processAppend(data []uint8) bool {
 	var m appendMessage
-	err := decode(&m, data)
+	err := decodeAppendMessage(&m, data)
 	if err != nil {
 		log.Printf("Client %v: %v", c.id, err)
 		return false

@@ -136,6 +136,14 @@ func (zh *Handler) SetSecretUser(username, password string) {
 	zh.hub.setWebhook(zh.webhookURL, zh.secretUser, zh.secretPassword)
 }
 
+// SetJWTKey enables JWT mode, so that only document IDs contained inside a
+// valid JWT will be accepted. The tokens must be signed using HMAC-SHA256
+// and this secret key.
+func (zh *Handler) SetJWTKey(key string, keyIsBase64 bool) {
+	zh.hub.jwtKey = key
+	zh.hub.keyIsBase64 = keyIsBase64
+}
+
 // SetWebhookURL sets a url to receive an event, a few minutes after
 // all users have left a session.
 func (zh *Handler) SetWebhookURL(url string) {

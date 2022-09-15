@@ -12,6 +12,8 @@ type hub struct {
 	webhookURL     string
 	secretUser     string
 	secretPassword string
+	jwtKey         string
+	keyIsBase64    bool
 }
 
 type session struct {

@@ -7,13 +7,14 @@ import (
 
 const (
 	initMessageType         = 0x01
-	appendMessageType       = 0x02
+	appendV2MessageType     = 0x02
+	appendMessageType       = 0x05
 	errorMessageType        = 0x80
 	ackNackMessageType      = 0x81
 	continuationMessageType = 0xff
 )
 
-type initMessage struct {
+type initMessageV2 struct {
 	MessageType     uint8
 	More            uint8
 	ProtocolVersion uint16
@@ -25,9 +26,30 @@ type initMessage struct {
 	Data            []byte
 }
 
+type initMessage struct {
+	MessageType     uint8
+	More            uint8
+	ProtocolVersion uint16
+	MaxMessageSize  uint32
+	CreationMode    uint8
+	Generation      uint32
+	Offset          uint64
+	DocIDLength     uint32
+	DocID           string
+	Data            []byte
+}
+
+type appendMessageV2 struct {
+	MessageType uint8
+	More        uint8
+	Offset      uint64
+	Data        []byte
+}
+
 type appendMessage struct {
 	MessageType uint8
 	More        uint8
+	Generation  uint32
 	Offset      uint64
 	Data        []byte
 }

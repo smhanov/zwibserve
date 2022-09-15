@@ -238,7 +238,7 @@ func readAppendMessage(conn *websocket.Conn) appendMessage {
 }
 
 func sendConnectMessage(conn *websocket.Conn, docID string) {
-	sendMessage(conn, initMessage{
+	sendMessage(conn, initMessageV2{
 		MessageType:     initMessageType,
 		ProtocolVersion: 0x0002,
 		CreationMode:    0x00, // possibly create
