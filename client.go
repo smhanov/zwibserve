@@ -29,6 +29,7 @@ type client struct {
 	// for tokens
 	userID          string
 	writePermission bool
+	adminPermission bool
 
 	db  DocumentDB
 	hub *hub
@@ -407,6 +408,7 @@ func (c *client) processInitMessage(data []uint8) bool {
 		log.Printf("Token %s maps to doc %s", m.DocID, realDocID)
 		c.docID = realDocID
 		c.writePermission = strings.Contains(permissions, "w")
+		c.adminPermission = strings.Contains(permissions, "a")
 		c.userID = userID
 
 		if !strings.Contains(permissions, "r") ||
@@ -567,8 +569,12 @@ func (c *client) processSetKey(data []uint8) bool {
 	}
 
 	var ack bool
-	if m.Lifetime == 0x00 {
+	if strings.HasPrefix(m.Name, "admin:") && !c.adminPermission {
+		log.Printf("Client %v: Tried to set admin: key but lacks permissions.", c.id)
+
+	} else if m.Lifetime == 0x00 {
 		ack = c.hub.setClientKey(c.docID, c, int(m.OldVersion), int(m.NewVersion), m.Name, m.Value)
+
 	} else {
 		key := Key{int(m.NewVersion), m.Name, m.Value}
 		ack = nil == c.db.SetDocumentKey(c.docID, int(m.OldVersion), key)
@@ -638,6 +644,7 @@ func (c *client) notifyLostAccess(code errorCode) {
 func (c *client) notifyPermissionChange(permissions string) {
 	c.mutex.Lock()
 	c.writePermission = strings.Contains(permissions, "w")
+	c.adminPermission = strings.Contains(permissions, "a")
 	c.mutex.Unlock()
 	if !strings.Contains(permissions, "r") {
 		c.notifyLostAccess(errorAccessDenied)
