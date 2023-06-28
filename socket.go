@@ -67,7 +67,7 @@ type DocumentDB interface {
 	GetDocumentKeys(docID string) ([]Key, error)
 
 	// SetExpirationTime sets the number of seconds that a document is kept without any activity
-	// before it is deleted. The zero value is the default (24 hours)
+	// before it is deleted. The zero value is the default (never)
 	SetExpiration(seconds int64)
 
 	DeleteDocument(docID string) error

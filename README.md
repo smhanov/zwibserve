@@ -113,7 +113,7 @@ Multiple instances of the server are not supported at this time. There must be o
 
 There are two options for data storage.
 #### Sqlite (default)
-The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The collaboration server is designed to store data only while a session is active. Long term storage should use [ctx.save()](https://zwibbler.com/docs/#save) and store the data using other means. Sessions that have not been accessed in 24 hours are purged.
+The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The collaboration server is designed to store data only while a session is active. Long term storage should use [ctx.save()](https://zwibbler.com/docs/#save) and store the data using other means. Sessions never expire by default, but you can [add expiration](#document-lifetime) by editing the zwibbler.conf file.
 
 #### Redis
 
@@ -128,6 +128,14 @@ To use redis, add these lines to the zwibbler.conf file:
     RedisPassword=
     
 ## Advanced options
+
+### Document lifetime
+By default, documents never expire. You can set an expiration time for documents, so they will automatically be deleted when they have not been accessed for a certain number of seconds.
+
+    # The number of seconds after a document is last accessed to purge unused 
+    # documents. Set to the special value "never" to disable. 
+    Expiration=never
+
 
 ### Security
 The [Zwibbler Collaboration Server Management API](https://docs.google.com/document/d/1vdUUEooti4F5Ob9rca2DVoOJOxyO2uftaCOUzKdXb4M/edit?usp=sharing) adds additional security, so that a skilled student hacker will be unable to alter the Javascript and write to a teacher's whiteboard unless given permission to do so. In this case, you must configure a username and password, and configure your own server software make a request to add a token with permissions before each persion connects to a session. That way, participants  connect using a token instead of a session identifier, and the permissions are enforced by the collaboration server instead of the client browser. Any management requests are authenticated using HTTP Basic Authentication with the given username and password.

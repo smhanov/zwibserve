@@ -109,11 +109,8 @@ func (db *RedisDocumentDB) GetDocument(docID string, mode CreateMode, initialDat
 }
 
 func (db *RedisDocumentDB) getRedisExpiration() time.Duration {
-	switch db.expiration {
-	case NoExpiration:
-		return 0
-	case 0:
-		return 24 * time.Hour
+	if db.expiration == 0 || db.expiration == NoExpiration {
+		return 0;
 	}
 	return time.Duration(db.expiration) * time.Second
 }

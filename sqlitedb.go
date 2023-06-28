@@ -74,9 +74,7 @@ func (db *SQLITEDocumentDB) SetExpiration(seconds int64) {
 
 func (db *SQLITEDocumentDB) clean() {
 	seconds := db.expiration
-	if seconds == 0 {
-		seconds = 24 * 60 * 60
-	} else if seconds == NoExpiration {
+	if seconds == 0 ||seconds == NoExpiration {
 		return
 	}
 
