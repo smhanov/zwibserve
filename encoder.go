@@ -6,11 +6,19 @@ import (
 )
 
 const (
-	initMessageType         = 0x01
-	appendV2MessageType     = 0x02
-	appendMessageType       = 0x05
-	errorMessageType        = 0x80
-	ackNackMessageType      = 0x81
+	initMessageType           = 0x01
+	appendV2MessageType       = 0x02
+	setKeyMessageType         = 0x03
+	broadcastMessageType      = 0x04
+	appendMessageType         = 0x05
+	errorMessageType          = 0x80
+	ackNackMessageType        = 0x81
+	keyInformationMessageType = 0x82
+
+	serverIdentificationMessageType = 0x84
+	swarmRegisterMessageType        = 0x85
+	swarmDataMessageType            = 0x86
+
 	continuationMessageType = 0xff
 )
 
@@ -91,7 +99,7 @@ type setKeyAckNackMessage struct {
 type keyInformationMessage struct {
 	MessageType uint8
 	More        uint8
-	Keys        []keyInformation
+	Keys        []keyInformation `repeat:"true"`
 }
 
 type keyInformation struct {
@@ -126,10 +134,14 @@ func sizeof(kind reflect.Kind) int {
 }
 
 func decode(s interface{}, m []byte) error {
+	_, err := _decode(s, m, 0)
+	return err
+}
+
+func _decode(s interface{}, m []byte, pos int) (int, error) {
 	v := reflect.Indirect(reflect.ValueOf(s))
 
 	var value uint64
-	pos := 0
 
 	for i := 0; i < v.NumField(); i++ {
 		// Get the field tag value
@@ -137,15 +149,20 @@ func decode(s interface{}, m []byte) error {
 		kind := field.Kind()
 		name := v.Type().Field(i).Name
 
+		isBytes := kind == reflect.Slice && field.Type().Elem().Kind() == reflect.Uint8
+
 		var size int
-		if kind == reflect.String {
+		if kind == reflect.String || isBytes && name != "Data" {
 			size = int(value)
 		} else {
 			size = sizeof(kind)
 		}
 
+		//log.Printf("Decode %s isbytes=%v size=%v", name, isBytes, size)
+
+		//log.Printf("At %v decode %v size is %v", pos, name, size)
 		if pos+size > len(m) {
-			return errors.New("message too short")
+			return pos, errors.New("message too short")
 		}
 
 		if kind == reflect.String {
@@ -153,6 +170,26 @@ func decode(s interface{}, m []byte) error {
 		} else if name == "Data" {
 			field.SetBytes(m[pos:])
 			pos = len(m)
+		} else if kind == reflect.Slice {
+			if isBytes {
+				field.SetBytes(m[pos : pos+size])
+			} else {
+				// read the tag of the field
+				repeatToEnd := v.Type().Field(i).Tag.Get("repeat") == "true"
+
+				var err error
+				elemType := field.Type().Elem()
+				size = 0 // int(value) * int(elemType.Size())
+				for j := uint64(0); repeatToEnd && pos < len(m) || !repeatToEnd && j < value; j++ {
+					elemValue := reflect.New(elemType)
+					pos, err = _decode(elemValue.Interface(), m, pos)
+					if err != nil {
+						return pos, err
+					}
+					tmp := reflect.Append(field, reflect.Indirect(elemValue))
+					field.Set(tmp)
+				}
+			}
 		} else {
 			value = readUint(m, pos, size)
 			field.SetUint(value)
@@ -161,7 +198,7 @@ func decode(s interface{}, m []byte) error {
 		pos += size
 	}
 
-	return nil
+	return pos, nil
 }
 
 func encode(m []byte, s interface{}) []byte {
@@ -169,15 +206,17 @@ func encode(m []byte, s interface{}) []byte {
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		kind := field.Kind()
-		name := v.Type().Field(i).Name
-
+		//name := v.Type().Field(i).Name
+		//log.Printf("Encode %s=%+v", name, s)
 		if kind == reflect.String {
 			m = append(m, []byte(field.String())...)
-		} else if name == "Data" {
-			m = append(m, field.Bytes()...)
 		} else if kind == reflect.Slice {
-			for j := 0; j < field.Len(); j++ {
-				m = encode(m, field.Index(j).Interface())
+			if field.Type().Elem().Kind() == reflect.Uint8 {
+				m = append(m, field.Bytes()...)
+			} else {
+				for j := 0; j < field.Len(); j++ {
+					m = encode(m, field.Index(j).Interface())
+				}
 			}
 		} else {
 			m = writeUint(m, field.Uint(), sizeof(kind))

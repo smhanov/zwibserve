@@ -182,7 +182,7 @@ func connect(args *stressTestArgs, clientID int) *websocket.Conn {
 	return c
 }
 
-func sendMessage(conn *websocket.Conn, message interface{}) {
+func sendStressMessage(conn *websocket.Conn, message interface{}) {
 	err := conn.WriteMessage(websocket.BinaryMessage, encode(nil, message))
 	if err != nil {
 		log.Panic(err)
@@ -238,7 +238,7 @@ func readAppendMessage(conn *websocket.Conn) appendMessage {
 }
 
 func sendConnectMessage(conn *websocket.Conn, docID string) {
-	sendMessage(conn, initMessageV2{
+	sendStressMessage(conn, initMessageV2{
 		MessageType:     initMessageType,
 		ProtocolVersion: 0x0002,
 		CreationMode:    0x00, // possibly create
@@ -303,7 +303,7 @@ func teacherClient(args *stressTestArgs, clientID int) {
 			if args.Verbose {
 				log.Printf("Teacher %d attempts to add to document at offset %d", clientID, offsetToUse)
 			}
-			sendMessage(conn, appendMessage{
+			sendStressMessage(conn, appendMessage{
 				MessageType: appendMessageType,
 				Offset:      offsetToUse,
 				Data:        data,

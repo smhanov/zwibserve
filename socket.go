@@ -92,6 +92,32 @@ type Key struct {
 	Value   string
 }
 
+// HAE is an interface that enables High Availability.
+// It is not included in the open source version.
+type HAE interface {
+	SetServerID(id string)
+	SetUrls(urls []string)
+	SetSecurityInfo(secretUser, secretPassword, jwtKey string, keyIsBase64 bool)
+	HandleIncomingConnection(ws *websocket.Conn, m []uint8)
+	NotifyClientAddRemove(docID string, clientID string, docLength uint64, added bool)
+	NotifyAppend(docID string, offset uint64, data []byte)
+	NotifyBroadcast(docID string, data []byte)
+	NotifyKeyUpdated(docID, clientID, name, value string, sessionLifetime bool)
+}
+
+// Hub is an interface to the collaboration hub that is used for high availability
+// extensions.
+type Hub interface {
+	Append(docid, clientid string, offset uint64, data []byte)
+	Broadcast(docid, clientid string, data []byte)
+	EachKey(f func(docID, clientID, name, value string, sessionLifetime bool))
+	EachClient(f func(docID, clientID string, docLength uint64))
+	SetClientKey(docID string, sourceID string, oldVersion, newVersion int, name, value string) bool
+	SetSessionKey(docID string, sourceID string, key Key)
+	RemoveClient(docID string, clientID string)
+	CheckMissedUpdate(docid string, doc []byte, keys []Key)
+}
+
 // Handler is an HTTP handler that will
 // enable collaboration between clients.
 type Handler struct {
@@ -108,7 +134,7 @@ type Handler struct {
 func NewHandler(db DocumentDB) *Handler {
 	return &Handler{
 		db:               db,
-		hub:              newHub(),
+		hub:              newHub(db),
 		allowCompression: true,
 	}
 }
@@ -134,6 +160,7 @@ func (zh *Handler) SetSecretUser(username, password string) {
 	zh.secretUser = username
 	zh.secretPassword = password
 	zh.hub.setWebhook(zh.webhookURL, zh.secretUser, zh.secretPassword)
+	zh.hub.swarm.SetSecurityInfo(zh.hub.secretUser, zh.hub.secretPassword, zh.hub.jwtKey, zh.hub.keyIsBase64)
 }
 
 // SetJWTKey enables JWT mode, so that only document IDs contained inside a
@@ -142,6 +169,25 @@ func (zh *Handler) SetSecretUser(username, password string) {
 func (zh *Handler) SetJWTKey(key string, keyIsBase64 bool) {
 	zh.hub.jwtKey = key
 	zh.hub.keyIsBase64 = keyIsBase64
+	zh.hub.swarm.SetSecurityInfo(zh.hub.secretUser, zh.hub.secretPassword, zh.hub.jwtKey, zh.hub.keyIsBase64)
+}
+
+// SetSwarmURLs sets the urls of other servers in the swarm.
+func (zh *Handler) SetSwarmURLs(urls []string) {
+	zh.hub.swarm.SetUrls(urls)
+}
+
+// SetServeID sets the server ID of the server for use with High Availability.
+// If unset, a random server ID is chosen.
+func (zh *Handler) SetServerID(id string) {
+	zh.hub.swarm.SetServerID(id)
+}
+
+// EnableHAE enables High Availability Extensions using the given
+// interface to the implementation. This must be the first method
+// that you call, before setting the security info, server id, etc.
+func (zh *Handler) EnableHAE(hae HAE) {
+
 }
 
 // SetWebhookURL sets a url to receive an event, a few minutes after

@@ -109,15 +109,16 @@ After that, go to https://zwibbler.com/collaboration/testing.html and enter the 
 
 If the collaboration server restarts, clients will gracefully reconnect without the user noticing anything wrong and any active sessions are preserved.
 
-Multiple instances of the server are not supported at this time. There must be one single collaboration server. It will support thousands of users without problems.
+In the basic version, each document must be hosted on one server, although a shared database can be used for higher reliability. All users for a particular whiteboard must connect to the same server. You can manage this by sharding the users based on their session identifier.
+
+If more redundancy is required, or for complex load balancing, then a special, non-open source version is available at extra cost that allows any user to connect to any of the servers, regardless of which whiteboard they are connecting to. See [High Availablility Extensions for Zwibbler Collaboration Server](https://docs.google.com/document/d/1tvMS_eh-uvXZryIxT5naLZmXjk86CzCLsL9E_So4MAE/edit?usp=sharing).
 
 There are two options for data storage.
 #### Sqlite (default)
 The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The collaboration server is designed to store data only while a session is active. Long term storage should use [ctx.save()](https://zwibbler.com/docs/#save) and store the data using other means. Sessions never expire by default, but you can [add expiration](#document-lifetime) by editing the zwibbler.conf file.
 
 #### Redis
-
-To use redis, add these lines to the zwibbler.conf file:
+Redis must be used if using more than one server instance. To use redis, add these lines to the zwibbler.conf file:
 
     # Can be sqlite or redis
     Database=redis
