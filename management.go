@@ -2,6 +2,7 @@ package zwibserve
 
 import (
 	"crypto/subtle"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -46,6 +47,7 @@ func (zh *Handler) verifyAuth(r *http.Request) {
 func mustGet(r *http.Request, key string) string {
 	value := r.FormValue(key)
 	if value == "" {
+		log.Printf("    Missing " + key)
 		HTTPPanic(400, "Missing "+key)
 	}
 	return value
@@ -56,7 +58,22 @@ func (zh *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) 
 	zh.verifyAuth(r)
 
 	docID := mustGet(r, "documentID")
-	contents := mustGet(r, "contents")
+	contents := []byte(r.FormValue("contents"))
+
+	// if there is no string by that name, then try a file.
+	if len(contents) == 0 {
+		file, _, err := r.FormFile("contents")
+		if err != nil {
+			HTTPPanic(400, "Missing contents")
+		}
+		defer file.Close()
+
+		// read the entire file as a string.
+		contents, err = io.ReadAll(file)
+		if err != nil {
+			HTTPPanic(400, "Error reading contents: "+err.Error())
+		}
+	}
 
 	_, _, err := zh.db.GetDocument(docID, AlwaysCreate, []byte(contents))
 	if err == ErrExists {

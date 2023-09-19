@@ -33,8 +33,18 @@ func NewRedisDB(options *redis.Options) DocumentDB {
 	}
 
 	go func() {
-		db.runMaintenance()
-		time.Sleep(time.Hour * 24)
+		for {
+			func() {
+				defer func() {
+					err := recover()
+					if err != nil {
+						log.Printf("Error: %v", err)
+					}
+				}()
+				db.runMaintenance()
+			}()
+			time.Sleep(time.Hour * 24)
+		}
 	}()
 
 	return db
