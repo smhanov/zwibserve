@@ -7,7 +7,7 @@ import (
 
 	"context"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v9"
 )
 
 var ctx = context.Background()
@@ -22,30 +22,42 @@ var ctx = context.Background()
 // but the tokens do.
 type RedisDocumentDB struct {
 	expiration int64
-	rdb        *redis.Client
+	rdb        redis.UniversalClient
+	isCluster  bool
 }
 
 // NewRedisDB creates a new document storage based on Redis
 func NewRedisDB(options *redis.Options) DocumentDB {
+	return newGeneralRedisDB(redis.NewClient(options), false)
+}
 
+// NewRedisClusterDB creates a new document storage based on Redis cluster
+func NewRedisClusterDB(options *redis.ClusterOptions) DocumentDB {
+	return newGeneralRedisDB(redis.NewClusterClient(options), true)
+}
+
+func newGeneralRedisDB(rdb redis.UniversalClient, isCluster bool) DocumentDB {
 	db := &RedisDocumentDB{
-		rdb: redis.NewClient(options),
+		rdb:       rdb,
+		isCluster: isCluster,
 	}
 
-	go func() {
-		for {
-			func() {
-				defer func() {
-					err := recover()
-					if err != nil {
-						log.Printf("Error: %v", err)
-					}
+	if !isCluster {
+		go func() {
+			for {
+				func() {
+					defer func() {
+						err := recover()
+						if err != nil {
+							log.Printf("Error: %v", err)
+						}
+					}()
+					db.runMaintenance()
 				}()
-				db.runMaintenance()
-			}()
-			time.Sleep(time.Hour * 24)
-		}
-	}()
+				time.Sleep(time.Hour * 24)
+			}
+		}()
+	}
 
 	return db
 }
@@ -63,8 +75,10 @@ func getKeys(docID string) string {
 	return "zwibbler-keys:" + docID
 }
 
+// We are going to keep all of the tokens on one server in the cluster.
+// This is to make the Watch in updatePermissions work.
 func getToken(tokenID string) string {
-	return "zwibbler-token:" + tokenID
+	return "zwibbler-token:{token}:" + tokenID
 }
 
 // GetDocument ...
@@ -120,7 +134,7 @@ func (db *RedisDocumentDB) GetDocument(docID string, mode CreateMode, initialDat
 
 func (db *RedisDocumentDB) getRedisExpiration() time.Duration {
 	if db.expiration == 0 || db.expiration == NoExpiration {
-		return 0;
+		return 0
 	}
 	return time.Duration(db.expiration) * time.Second
 }
@@ -257,6 +271,10 @@ func (db *RedisDocumentDB) executeWatch(watchfn func(tx *redis.Tx) error, keys .
 
 // AddToken ...
 func (db *RedisDocumentDB) AddToken(tokenID, docID, userID, permissions string, expirationSeconds int64, contents []byte) error {
+	if db.isCluster {
+		log.Panicf("addToken not supported with clusters. Use JWT instead.")
+	}
+
 	tokenID = getToken(tokenID)
 
 	err := db.executeWatch(func(tx *redis.Tx) error {
@@ -294,7 +312,10 @@ func (db *RedisDocumentDB) AddToken(tokenID, docID, userID, permissions string, 
 		})
 
 		return err
-	}, tokenID, getDocID(docID))
+
+		// This watch should really have getDocID(docID) too but we can't because
+		// we might be using a cluster. Instead we deprecate AddToken.
+	}, tokenID)
 
 	return err
 
@@ -317,6 +338,10 @@ func (db *RedisDocumentDB) GetToken(token string) (docID, userID, permissions st
 
 // If the user has any tokens, the permissions of all of them are updated.
 func (db *RedisDocumentDB) UpdateUser(userID, permissions string) error {
+	if db.isCluster {
+		log.Panicf("updateUser not supported with clusters. Use JWT instead.")
+	}
+
 	tokens, err := db.rdb.SMembers(ctx, "zwibbler-user:"+userID).Result()
 	if err != nil {
 		panic(err)
@@ -341,6 +366,7 @@ func (db *RedisDocumentDB) UpdateUser(userID, permissions string) error {
 }
 
 func (db *RedisDocumentDB) runMaintenance() {
+	// not called if using redis-cluster
 	log.Printf("Running Redis maintenance")
 	// We used a zwibbler-user: key to quickly lookup the tokens for a given user.
 	// But there is no way to expire a member of a set. So once a day, go through them
