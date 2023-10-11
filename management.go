@@ -25,7 +25,9 @@ func (zh *Handler) serveMAPI(w http.ResponseWriter, r *http.Request) bool {
 		case "deleteDocument":
 			zh.handleDeleteDocument(w, r)
 		case "dumpDocument":
-			zh.handleDumpDocument(w, r)
+			zh.handleDumpDocument(w, r, true)
+		case "checkDocument":
+			zh.handleDumpDocument(w, r, false)
 		default:
 			HTTPPanic(400, "Unknown 'method' parameter")
 		}
@@ -100,7 +102,7 @@ func (zh *Handler) handleDeleteDocument(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(200)
 }
 
-func (zh *Handler) handleDumpDocument(w http.ResponseWriter, r *http.Request) {
+func (zh *Handler) handleDumpDocument(w http.ResponseWriter, r *http.Request, dump bool) {
 	log.Printf("Got request for dumpDocument")
 	zh.verifyAuth(r)
 
@@ -115,8 +117,12 @@ func (zh *Handler) handleDumpDocument(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 
-	w.Header().Set("Content-Type", "text")
-	w.Write(contents)
+	if dump {
+		w.Header().Set("Content-Type", "text")
+		w.Write(contents)
+	} else {
+		w.WriteHeader(200)
+	}
 }
 
 func (zh *Handler) handleAddToken(w http.ResponseWriter, r *http.Request) {
