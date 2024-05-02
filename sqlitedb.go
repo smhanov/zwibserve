@@ -72,9 +72,14 @@ func (db *SQLITEDocumentDB) SetExpiration(seconds int64) {
 	db.expiration = seconds
 }
 
+func (db *SQLITEDocumentDB) CheckHealth() error {
+	tx := db.conn.MustBegin()
+	return tx.Commit()
+}
+
 func (db *SQLITEDocumentDB) clean() {
 	seconds := db.expiration
-	if seconds == 0 ||seconds == NoExpiration {
+	if seconds == 0 || seconds == NoExpiration {
 		return
 	}
 

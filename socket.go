@@ -83,6 +83,10 @@ type DocumentDB interface {
 
 	// If the user has any tokens, the permissions of all of them are updated.
 	UpdateUser(userID, permissions string) error
+
+	// Check the health of the database. Used periodically by a watchdog to determine if the entire
+	// server is still functioning correctly.
+	CheckHealth() error
 }
 
 // Key is a key that can be set by clients, related to the session.
@@ -208,7 +212,16 @@ func (zh *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			handled = zh.serveMAPI(w, r)
 		})))(w, r)
 
-		if !handled && r.Method != "POST" {
+		// if the request has a parameter "ping" then call the health check of the database
+		// and if successful, return the 200 response. Otherwise, return 500.
+		if !handled && r.Method == "GET" && r.URL.Query().Has("ping") {
+			if err := zh.db.CheckHealth(); err != nil {
+				http.Error(w, "Database health check failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-type", "text")
+			w.Write([]byte("OK"))
+		} else if !handled && r.Method != "POST" {
 			w.Header().Set("Content-type", "text")
 			w.Write([]byte("Zwibbler collaboration Server is running."))
 		}

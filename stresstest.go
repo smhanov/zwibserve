@@ -222,11 +222,11 @@ func studentClient(args *stressTestArgs, clientID int) {
 	}
 }
 
-func readAppendMessage(conn *websocket.Conn) appendMessage {
+func readAppendMessage(conn *websocket.Conn) appendMessageV2 {
 	bytes := readStressMessage(conn)
 
-	var m appendMessage
-	if bytes[0] == appendMessageType {
+	var m appendMessageV2
+	if bytes[0] == appendV2MessageType {
 		err := decode(&m, bytes)
 		if err != nil {
 			log.Panic(err)
@@ -316,8 +316,8 @@ func teacherClient(args *stressTestArgs, clientID int) {
 	// reading thread
 	for !args.abort {
 		bytes := readStressMessage(conn)
-		if bytes[0] == appendMessageType {
-			var m appendMessage
+		if bytes[0] == appendV2MessageType {
+			var m appendMessageV2
 			err := decode(&m, bytes)
 			if err != nil {
 				log.Panic(err)

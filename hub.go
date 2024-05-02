@@ -46,7 +46,7 @@ func newHub(db DocumentDB) *hub {
 
 func (h *hub) addClient(docID string, c *client) {
 	h.ch <- func() {
-		log.Printf("Client %v registers for document %v", c.id, docID)
+		log.Printf("Client %v registers for document %v (system has %v clients)", c.id, docID, h.countClients())
 		s := h.sessions[docID]
 		if s == nil {
 			h.sessions[docID] = &session{
@@ -158,7 +158,8 @@ func isRemoteID(id string) bool {
 func (h *hub) Append(docID string, source string, offset uint64, data []uint8) {
 	h.ch <- func() {
 		if _, ok := h.sessions[docID]; ok {
-			log.Printf("client %v appends %v bytes offset %v, send to %v other clients", source,
+			log.Printf("client %v (remote=%v) appends %v bytes offset %v, send to %v other clients", source,
+				isRemoteID(source),
 				len(data), offset, len(h.sessions[docID].clients)-1)
 
 			for _, other := range h.sessions[docID].clients {
@@ -168,7 +169,6 @@ func (h *hub) Append(docID string, source string, offset uint64, data []uint8) {
 			}
 
 			// if source is nil, it came from a remote server.
-			log.Printf("source %v isRemote?: %v", source, isRemoteID(source))
 			if !isRemoteID(source) {
 				h.swarm.NotifyAppend(docID, offset, data)
 			}
@@ -314,6 +314,14 @@ func (h *hub) EachKey(fn func(docID, clientID, name, value string, sessionLifeti
 			}
 		}
 	})
+}
+
+func (h *hub) countClients() int {
+	var count int
+	for _, sess := range h.sessions {
+		count += len(sess.clients)
+	}
+	return count
 }
 
 func (h *hub) EachClient(fn func(docID, clientID string, docLength uint64)) {

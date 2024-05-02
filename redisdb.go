@@ -62,6 +62,11 @@ func newGeneralRedisDB(rdb redis.UniversalClient, isCluster bool) DocumentDB {
 	return db
 }
 
+func (db *RedisDocumentDB) CheckHealth() error {
+	_, err := db.rdb.Ping(ctx).Result()
+	return err
+}
+
 // SetExpiration ...
 func (db *RedisDocumentDB) SetExpiration(seconds int64) {
 	db.expiration = seconds

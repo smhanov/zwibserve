@@ -5,6 +5,7 @@ go 1.14
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/go-redis/redis/v9 v9.0.0-rc.2
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.4.3
 	github.com/gorilla/websocket v1.5.0

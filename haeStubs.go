@@ -9,7 +9,7 @@ import "github.com/gorilla/websocket"
 type peerList struct {
 }
 
-func newPeerList(h *hub, db DocumentDB) *peerList {
+func newPeerList(_ *hub, _ DocumentDB) *peerList {
 	return &peerList{}
 }
 

@@ -37,6 +37,10 @@ func NewMemoryDB() DocumentDB {
 	}
 }
 
+func (db *MemoryDocumentDB) CheckHealth() error {
+	return nil
+}
+
 // SetExpiration ...
 func (db *MemoryDocumentDB) SetExpiration(seconds int64) {
 	db.expiration = seconds
