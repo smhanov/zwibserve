@@ -120,7 +120,7 @@ The data is stored in an SQLITE database in /var/lib/zwibbler/zwibbler.db. The c
 #### Redis
 Redis must be used if using more than one server instance. To use redis, add these lines to the zwibbler.conf file:
 
-    # Can be sqlite or redis
+    # Change this to redis
     Database=redis
 
     # If using Redis, these are the settings.
@@ -128,6 +128,20 @@ Redis must be used if using more than one server instance. To use redis, add the
     RedisServer=
     RedisPassword=
     
+#### MariaDB, PostgreSQL, and MySQL
+You can use another relational database for the collaboration server. To use MariaDB, PostgreSQL, or MySQL, change the Database config:
+
+    # Can be sqlite, postgres, mysql, mariadb, or redis or redis-cluster
+    Database=sqlite
+
+Then insert the DB settings:
+
+    # If using another relational database, these are the settings.
+    DbPort=
+    DbHost=
+    DbUser=
+    DbPassword=
+
 ## Advanced options
 
 ### Document lifetime
