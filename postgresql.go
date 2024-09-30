@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS ZwibblerDocs (
 CREATE TABLE IF NOT EXISTS ZwibblerKeys (
 	docID TEXT,
 	name TEXT,
-	value MEDIUMTEXT,
+	value TEXT,
 	version INT,
 	UNIQUE(docID, name),
 	FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docID) ON DELETE CASCADE
