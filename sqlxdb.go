@@ -96,7 +96,7 @@ func (db *SQLxDocumentDB) GetDocument(docID string, mode CreateMode, initialData
 		}
 		created = false
 	}
-	rows.Close()
+	rows.Close() // Necessary for postgresql
 
 	if doc == nil && mode == NeverCreate {
 		return nil, false, ErrMissing
@@ -135,7 +135,7 @@ func (db *SQLxDocumentDB) AppendDocument(docID string, oldLength uint64, newData
 			log.Panic(err)
 		}
 	}
-	rows.Close()
+	rows.Close() // Necessary for postgresql
 
 	if doc == nil {
 		return 0, ErrMissing
@@ -198,7 +198,7 @@ func (db *SQLxDocumentDB) SetDocumentKey(docID string, oldVersion int, key Key) 
 			log.Panic(err)
 		}
 	}
-	rows.Close()
+	rows.Close() // Necessary for postgresql
 
 	// if the key exists, and the old version does not match, then fail.
 	if exists && dbVersion != oldVersion {
