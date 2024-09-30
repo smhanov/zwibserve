@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS ZwibblerDocs (
 CREATE TABLE IF NOT EXISTS ZwibblerKeys (
 	docID TEXT,
 	name TEXT,
-	value TEXT,
+	value MEDIUMTEXT,
 	version INT,
 	UNIQUE(docID, name),
 	FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docID) ON DELETE CASCADE
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS ZwibblerTokens (
 CREATE INDEX IF NOT EXISTS ZwibblerTokenUserIndex ON ZwibblerTokens(userID);
 `
 
-func NewPostgreSQLConnection(port int, host, user, password, dbname string) DocumentDB {
-	psqlInfo := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, password, host, port, dbname)
+func NewPostgreSQLConnection(server, user, password, dbname string) DocumentDB {
+	psqlInfo := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable", user, password, server, dbname)
 	return NewSQLXConnection("postgres", psqlInfo, postgresqlSchema, 1, true)
 }

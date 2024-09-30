@@ -123,24 +123,24 @@ Redis must be used if using more than one server instance. To use redis, add the
     # Change this to redis
     Database=redis
 
-    # If using Redis, these are the settings.
-    # Default: localhost:6379
-    RedisServer=
-    RedisPassword=
+    # Default DbServer for Redis: localhost:6379
+    DbServer=
+    DbPassword=
+
+The DbUser field is unnecessary for Redis.
     
 #### MariaDB, PostgreSQL, and MySQL
 You can use another relational database for the collaboration server. To use MariaDB, PostgreSQL, or MySQL, change the Database config:
 
-    # Can be sqlite, postgres, mysql, mariadb, or redis or redis-cluster
-    Database=sqlite
+    Database=mariadb
 
 Then insert the DB settings:
 
-    # If using another relational database, these are the settings.
-    DbPort=
-    DbHost=
-    DbUser=
+    # Default DbServer for MariaDB and MySQL: localhost:3306
+    # Default DbServer for Redis: localhost:6379
+    DbServer=
     DbPassword=
+    DbUser=
 
 ## Advanced options
 

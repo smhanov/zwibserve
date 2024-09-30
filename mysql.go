@@ -7,7 +7,7 @@ import (
 
 const mysqlSchema = mariadbSchema // Reuse MariaDB schema
 
-func NewMySQLConnection(port int, host, user, password, dbname string) DocumentDB {
-	mysqlInfo := fmt.Sprintf("%s:%s@(%s:%d)/%s", user, password, host, port, dbname)
+func NewMySQLConnection(server, user, password, dbname string) DocumentDB {
+	mysqlInfo := fmt.Sprintf("%s:%s@(%s)/%s", user, password, server, dbname)
 	return NewSQLXConnection("mysql", mysqlInfo, mysqlSchema, 1, false)
 }

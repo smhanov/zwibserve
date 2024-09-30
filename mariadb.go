@@ -7,32 +7,32 @@ import (
 
 const mariadbSchema = `
 CREATE TABLE IF NOT EXISTS ZwibblerDocs (
-    docID VARCHAR(255) PRIMARY KEY,
+    docID TEXT PRIMARY KEY,
     lastAccess BIGINT,
     data LONGBLOB
 );
 
 CREATE TABLE IF NOT EXISTS ZwibblerKeys (
-    docID VARCHAR(255),
-    name VARCHAR(255),
-    value VARCHAR(255),
+    docID TEXT,
+    name TEXT,
+    value MEDIUMTEXT,
     version INT,
     UNIQUE(docID, name),
     FOREIGN KEY (docID) REFERENCES ZwibblerDocs(docid) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS ZwibblerTokens (
-    tokenID VARCHAR(255) UNIQUE,
-    docID VARCHAR(255),
-    userID VARCHAR(255),
-    permissions VARCHAR(255),
+    tokenID TEXT UNIQUE,
+    docID TEXT,
+    userID TEXT,
+    permissions TEXT,
     expiration BIGINT
 );
 
 CREATE INDEX IF NOT EXISTS ZwibblerTokenUserIndex ON ZwibblerTokens(userID);
 `
 
-func NewMariaDBConnection(port int, host, user, password, dbname string) DocumentDB {
-	mariaInfo := fmt.Sprintf("%s:%s@(%s:%d)/%s?multiStatements=true", user, password, host, port, dbname)
+func NewMariaDBConnection(server, user, password, dbname string) DocumentDB {
+	mariaInfo := fmt.Sprintf("%s:%s@(%s)/%s?multiStatements=true", user, password, server, dbname)
 	return NewSQLXConnection("mysql", mariaInfo, mariadbSchema, 1, false)
 }
