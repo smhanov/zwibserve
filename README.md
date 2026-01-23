@@ -176,8 +176,8 @@ If desired, the server can be configured to only accept session identifiers cont
 ### Increasing maximum number of connections
 To support more than 1024 connections on Linux, you will have to increase your system limit on the number of file handles. This is often done by adding these lines to /etc/security/limits.conf:
 
-    * hard nofiles 100000
-    * soft nofiles 100000
+    * hard nofile 100000
+    * soft nofile 100000
     
 To tell Zwibbler to take advantage of these limits, you set MaxFiles to the same value in /etc/zwibbler.conf:
     
